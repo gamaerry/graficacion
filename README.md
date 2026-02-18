@@ -15,3 +15,8 @@
 ## Evaluacion
 - Examen 50%
 - Proyecto 50%
+
+https://ealcaraz85.github.io/Graficacion.io/
+https://www.dropbox.com/scl/fo/zmusb26b4v1a6jt05hpkn/h?rlkey=h0lteauogp6k38chjox1skmyg&e=1&st=kaipl5d2&dl=0
+
+
