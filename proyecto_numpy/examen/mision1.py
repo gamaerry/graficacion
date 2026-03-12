@@ -18,4 +18,9 @@ cv2.destroyAllWindows()
 # --- MODO OPENCV ---
 # Usa la magia de la vectorización
 
+nuevo_lienzo_2 = img * 50
+# np.clip(nuevo_lienzo_2, 0, 255) #Funciona incluso sin el clip!!
+cv2.imshow("mensaje descubierto 2", nuevo_lienzo_2)
+cv2.waitKey(0)
+cv2.destroyAllWindows()
 
