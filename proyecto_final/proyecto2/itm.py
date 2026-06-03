@@ -10,6 +10,8 @@ SVG_W, SVG_H = 2213.0, 2135.0
 SCALE = 70.0
 
 keys = {}
+cenital_view = False
+unified_buildings = False
 camera_pos = [2.0, 24.0, 34.0]
 camera_yaw = -92.0
 camera_pitch = -23.0
@@ -50,6 +52,9 @@ GREEN_AREAS = [
     [(632, 1340), (257, 1331), (244, 1337), (238, 1352), (248, 1381), (397, 1450), (584, 1538), (591, 1432)],
     [(996, 1225), (713, 1220), (711, 1327), (994, 1332)],
     [(1760, 1800), (2208, 1945), (2015, 2132), (1708, 2042)],
+    # Nuevos triángulos de relleno (Modificación quirúrgica solicitada)
+    [(580, 180), (781, 257), (220, 1020)],
+    [(1750, 1800), (1917, 1585), (2200, 1950)],
 ]
 
 
@@ -107,7 +112,6 @@ RECTANGULAR_GRAY_AREAS = [
     [(170, 675), (520, 682), (518, 775), (168, 768)],
     [(1020, 300), (1475, 310), (1530, 520), (980, 510)],
     [(980, 520), (1545, 532), (1538, 895), (970, 884)],
-    [(770, 650), (1285, 660), (1280, 850), (765, 840)],
     [(760, 870), (1210, 878), (1206, 980), (755, 972)],
     [(490, 955), (700, 960), (695, 1120), (485, 1115)],
     [(385, 1115), (1005, 1126), (1000, 1330), (380, 1320)],
@@ -206,12 +210,33 @@ SPORTS_FIELDS = [
 
 
 def key_callback(window, key, scancode, action, mods):
+    global cenital_view, camera_pitch, camera_yaw, unified_buildings
     if action == glfw.PRESS:
         keys[key] = True
         if key == glfw.KEY_ESCAPE:
             glfw.set_window_should_close(window, True)
+        if key == glfw.KEY_M:
+            unified_buildings = not unified_buildings
+            print(f"Edificios Unificados: {'ON' if unified_buildings else 'OFF'}")
+        if key == glfw.KEY_C:
+            cenital_view = not cenital_view
+            if cenital_view:
+                camera_pitch = -89.0
+                camera_yaw = -90.0
+                print("Vista Cenital: ON")
+            else:
+                camera_pitch = -23.0
+                print("Vista Cenital: OFF")
     elif action == glfw.RELEASE:
         keys[key] = False
+
+
+def cursor_pos_callback(window, xpos, ypos):
+    pass
+
+
+def mouse_button_callback(window, button, action, mods):
+    pass
 
 
 def scroll_callback(window, xoffset, yoffset):
@@ -221,6 +246,11 @@ def scroll_callback(window, xoffset, yoffset):
 def svg_to_world(point):
     x, y = point
     return ((x - SVG_W * 0.5) / SCALE, (y - SVG_H * 0.5) / SCALE)
+
+
+def world_to_svg(point):
+    x, z = point
+    return (x * SCALE + SVG_W * 0.5, z * SCALE + SVG_H * 0.5)
 
 
 def color3(color):
@@ -361,13 +391,24 @@ def draw_field(points):
         return
 
     a, b, c, d = world
-    left_mid = interp_world(a, d, 0.5)
-    right_mid = interp_world(b, c, 0.5)
+    
+    # Detectar orientación
+    dist_horiz = math.dist(a, b)
+    dist_vert = math.dist(a, d)
+    horizontal = dist_horiz > dist_vert
+
+    if horizontal:
+        m1 = interp_world(a, b, 0.5)
+        m2 = interp_world(d, c, 0.5)
+    else:
+        m1 = interp_world(a, d, 0.5)
+        m2 = interp_world(b, c, 0.5)
+
     glLineWidth(1.8)
     color3((0.96, 0.96, 0.92))
     glBegin(GL_LINES)
-    glVertex3f(left_mid[0], SPORT_Y + 0.04, left_mid[1])
-    glVertex3f(right_mid[0], SPORT_Y + 0.04, right_mid[1])
+    glVertex3f(m1[0], SPORT_Y + 0.04, m1[1])
+    glVertex3f(m2[0], SPORT_Y + 0.04, m2[1])
     glEnd()
 
     cx = (a[0] + b[0] + c[0] + d[0]) / 4.0
@@ -376,37 +417,65 @@ def draw_field(points):
     draw_polyline_world(circle, (0.96, 0.96, 0.92), SPORT_Y + 0.05, 1.4, True)
 
     for t1, t2 in [(0.08, 0.24), (0.76, 0.92)]:
-        p1 = interp_world(a, d, t1)
-        p2 = interp_world(b, c, t1)
-        p3 = interp_world(b, c, t2)
-        p4 = interp_world(a, d, t2)
-        box_a = interp_world(p1, p2, 0.25)
-        box_b = interp_world(p1, p2, 0.75)
-        box_c = interp_world(p4, p3, 0.75)
-        box_d = interp_world(p4, p3, 0.25)
+        if horizontal:
+            p1 = interp_world(a, b, t1)
+            p2 = interp_world(d, c, t1)
+            p3 = interp_world(d, c, t2)
+            p4 = interp_world(a, b, t2)
+            box_a = interp_world(p1, p2, 0.25)
+            box_b = interp_world(p1, p2, 0.75)
+            box_c = interp_world(p4, p3, 0.75)
+            box_d = interp_world(p4, p3, 0.25)
+        else:
+            p1 = interp_world(a, d, t1)
+            p2 = interp_world(b, c, t1)
+            p3 = interp_world(b, c, t2)
+            p4 = interp_world(a, d, t2)
+            box_a = interp_world(p1, p2, 0.25)
+            box_b = interp_world(p1, p2, 0.75)
+            box_c = interp_world(p4, p3, 0.75)
+            box_d = interp_world(p4, p3, 0.25)
         draw_polyline_world([box_a, box_b, box_c, box_d], (0.96, 0.96, 0.92), SPORT_Y + 0.05, 1.2, True)
 
 
 def draw_prism(points, height, wall_color, roof_color):
     world = [svg_to_world(p) for p in points]
+    
+    if unified_buildings:
+        # Modo Unificado: Un solo color y base alineada con el concreto
+        base_color = roof_color
+        color3(base_color)
+        glBegin(GL_QUADS)
+        for i, (x1, z1) in enumerate(world):
+            x2, z2 = world[(i + 1) % len(world)]
+            glVertex3f(x1, GRAY_Y, z1)
+            glVertex3f(x2, GRAY_Y, z2)
+            glVertex3f(x2, height, z2)
+            glVertex3f(x1, height, z1)
+        glEnd()
 
-    color3(wall_color)
-    glBegin(GL_QUADS)
-    for i, (x1, z1) in enumerate(world):
-        x2, z2 = world[(i + 1) % len(world)]
-        glVertex3f(x1, 0.03, z1)
-        glVertex3f(x2, 0.03, z2)
-        glVertex3f(x2, height, z2)
-        glVertex3f(x1, height, z1)
-    glEnd()
+        glBegin(GL_POLYGON)
+        for x, z in world:
+            glVertex3f(x, height, z)
+        glEnd()
+    else:
+        # Modo Clásico: Paredes y techos distintos con contorno
+        color3(wall_color)
+        glBegin(GL_QUADS)
+        for i, (x1, z1) in enumerate(world):
+            x2, z2 = world[(i + 1) % len(world)]
+            glVertex3f(x1, 0.03, z1)
+            glVertex3f(x2, 0.03, z2)
+            glVertex3f(x2, height, z2)
+            glVertex3f(x1, height, z1)
+        glEnd()
 
-    color3(roof_color)
-    glBegin(GL_POLYGON)
-    for x, z in world:
-        glVertex3f(x, height, z)
-    glEnd()
-
-    draw_line_loop(points, (0.12, 0.10, 0.08), height + 0.01, 1.0)
+        color3(roof_color)
+        glBegin(GL_POLYGON)
+        for x, z in world:
+            glVertex3f(x, height, z)
+        glEnd()
+        draw_line_loop(points, (0.12, 0.10, 0.08), height + 0.01, 1.0)
 
 
 def draw_ground(size=42):
@@ -475,7 +544,7 @@ def draw_sports_fields():
 
     # Canchas al sur del campus principal.
     draw_field([(1415, 1510), (1768, 1518), (1763, 1706), (1410, 1698)])
-    draw_field([(1462, 1845), (1628, 1849), (1624, 1950), (1458, 1946)])
+    draw_field([(1462, 1805), (1628, 1809), (1624, 1910), (1458, 1906)])
 
     # Canchas rectangulares del centro-oriente.
     for points in [
@@ -483,8 +552,27 @@ def draw_sports_fields():
         [(1352, 1298), (1518, 1301), (1514, 1436), (1348, 1432)],
         [(1948, 1868), (2102, 1930), (2066, 2010), (1912, 1948)],
     ]:
-        draw_flat_polygon(points, FIELD_COLOR, SPORT_Y)
+        draw_flat_polygon(points, BASE_GREEN_COLOR, SPORT_Y)
         draw_line_loop(points, (0.96, 0.96, 0.92), SPORT_Y + 0.04, 1.5)
+
+
+def is_point_in_poly(point, poly):
+    x, y = point
+    n = len(poly)
+    inside = False
+    if n < 3: return False
+    p1x, p1y = poly[0]
+    for i in range(n + 1):
+        p2x, p2y = poly[i % n]
+        if y > min(p1y, p2y):
+            if y <= max(p1y, p2y):
+                if x <= max(p1x, p2x):
+                    if p1y != p2y:
+                        xints = (y - p1y) * (p2x - p1x) / (p2y - p1y) + p1x
+                    if p1x == p2x or x <= xints:
+                        inside = not inside
+        p1x, p1y = p2x, p2y
+    return inside
 
 
 def draw_tree(x, z, scale=1.0):
@@ -492,27 +580,30 @@ def draw_tree(x, z, scale=1.0):
     glTranslatef(x, 0.0, z)
     glScalef(scale, scale, scale)
 
+    # Tronco cilindrico "perfecto"
     color3((0.35, 0.22, 0.10))
-    glBegin(GL_QUADS)
-    glVertex3f(-0.05, 0.0, -0.05)
-    glVertex3f(0.05, 0.0, -0.05)
-    glVertex3f(0.05, 0.45, -0.05)
-    glVertex3f(-0.05, 0.45, -0.05)
-    glVertex3f(-0.05, 0.0, 0.05)
-    glVertex3f(0.05, 0.0, 0.05)
-    glVertex3f(0.05, 0.45, 0.05)
-    glVertex3f(-0.05, 0.45, 0.05)
+    segments = 16
+    radius = 0.06
+    height = 0.45
+    glBegin(GL_QUAD_STRIP)
+    for i in range(segments + 1):
+        angle = i * 2.0 * math.pi / segments
+        cx = math.cos(angle) * radius
+        cz = math.sin(angle) * radius
+        glVertex3f(cx, 0.0, cz)
+        glVertex3f(cx, height, cz)
     glEnd()
 
+    # Copas de las hojas
     color3((0.12, 0.48, 0.16))
-    for dy, radius in [(0.48, 0.30), (0.70, 0.23)]:
+    for dy, leaf_radius in [(0.48, 0.30), (0.70, 0.23)]:
         glBegin(GL_TRIANGLES)
-        for i in range(10):
-            a1 = i * 2 * math.pi / 10
-            a2 = (i + 1) * 2 * math.pi / 10
+        for i in range(12):
+            a1 = i * 2 * math.pi / 12
+            a2 = (i + 1) * 2 * math.pi / 12
             glVertex3f(0.0, dy + 0.35, 0.0)
-            glVertex3f(math.cos(a1) * radius, dy, math.sin(a1) * radius)
-            glVertex3f(math.cos(a2) * radius, dy, math.sin(a2) * radius)
+            glVertex3f(math.cos(a1) * leaf_radius, dy, math.sin(a1) * leaf_radius)
+            glVertex3f(math.cos(a2) * leaf_radius, dy, math.sin(a2) * leaf_radius)
         glEnd()
     glPopMatrix()
 
@@ -523,9 +614,15 @@ def draw_trees():
         (1780, 1150), (1520, 1540), (1180, 1740), (520, 1480), (320, 1350),
         (260, 430), (650, 650), (1980, 900), (1850, 1600), (1450, 330),
     ]
+    
+    # Listas de polígonos donde es válido tener árboles
+    valid_polys = CAMPUS_BASE_AREAS + GREEN_AREAS + RECTANGULAR_GRAY_AREAS + CONCRETE_AREAS + WALKWAYS
+    
     for i, p in enumerate(tree_points):
-        x, z = svg_to_world(p)
-        draw_tree(x, z, 0.75 + (i % 3) * 0.18)
+        # Verificar si el punto está dentro de algún polígono válido
+        if any(is_point_in_poly(p, poly) for poly in valid_polys):
+            x, z = svg_to_world(p)
+            draw_tree(x, z, 0.75 + (i % 3) * 0.18)
 
 
 def draw_compass():
@@ -559,9 +656,15 @@ def draw_scene(window):
 
     yaw = math.radians(camera_yaw)
     pitch = math.radians(camera_pitch)
-    look_x = camera_pos[0] + math.cos(pitch) * math.cos(yaw)
-    look_y = camera_pos[1] + math.sin(pitch)
-    look_z = camera_pos[2] + math.cos(pitch) * math.sin(yaw)
+    
+    dir_x = math.cos(pitch) * math.cos(yaw)
+    dir_y = math.sin(pitch)
+    dir_z = math.cos(pitch) * math.sin(yaw)
+    
+    look_x = camera_pos[0] + dir_x
+    look_y = camera_pos[1] + dir_y
+    look_z = camera_pos[2] + dir_z
+    
     gluLookAt(
         camera_pos[0],
         camera_pos[1],
@@ -585,34 +688,48 @@ def draw_scene(window):
 def process_input():
     global camera_yaw, camera_pitch
 
-    yaw = math.radians(camera_yaw)
-    forward = [math.cos(yaw), math.sin(yaw)]
-    right = [math.cos(yaw + math.pi / 2), math.sin(yaw + math.pi / 2)]
+    if cenital_view:
+        # En vista cenital, el movimiento es puramente X/Z
+        if keys.get(glfw.KEY_W, False):
+            camera_pos[2] -= camera_speed
+        if keys.get(glfw.KEY_S, False):
+            camera_pos[2] += camera_speed
+        if keys.get(glfw.KEY_A, False):
+            camera_pos[0] -= camera_speed
+        if keys.get(glfw.KEY_D, False):
+            camera_pos[0] += camera_speed
+    else:
+        yaw = math.radians(camera_yaw)
+        forward = [math.cos(yaw), math.sin(yaw)]
+        right = [math.cos(yaw + math.pi / 2), math.sin(yaw + math.pi / 2)]
 
-    if keys.get(glfw.KEY_W, False):
-        camera_pos[0] += forward[0] * camera_speed
-        camera_pos[2] += forward[1] * camera_speed
-    if keys.get(glfw.KEY_S, False):
-        camera_pos[0] -= forward[0] * camera_speed
-        camera_pos[2] -= forward[1] * camera_speed
-    if keys.get(glfw.KEY_A, False):
-        camera_pos[0] -= right[0] * camera_speed
-        camera_pos[2] -= right[1] * camera_speed
-    if keys.get(glfw.KEY_D, False):
-        camera_pos[0] += right[0] * camera_speed
-        camera_pos[2] += right[1] * camera_speed
+        if keys.get(glfw.KEY_W, False):
+            camera_pos[0] += forward[0] * camera_speed
+            camera_pos[2] += forward[1] * camera_speed
+        if keys.get(glfw.KEY_S, False):
+            camera_pos[0] -= forward[0] * camera_speed
+            camera_pos[2] -= forward[1] * camera_speed
+        if keys.get(glfw.KEY_A, False):
+            camera_pos[0] -= right[0] * camera_speed
+            camera_pos[2] -= right[1] * camera_speed
+        if keys.get(glfw.KEY_D, False):
+            camera_pos[0] += right[0] * camera_speed
+            camera_pos[2] += right[1] * camera_speed
+
     if keys.get(glfw.KEY_KP_8, False):
         camera_pos[1] += camera_speed
     if keys.get(glfw.KEY_KP_2, False):
         camera_pos[1] = max(2.5, camera_pos[1] - camera_speed)
-    if keys.get(glfw.KEY_LEFT, False):
-        camera_yaw -= turn_speed
-    if keys.get(glfw.KEY_RIGHT, False):
-        camera_yaw += turn_speed
-    if keys.get(glfw.KEY_UP, False):
-        camera_pitch = min(8.0, camera_pitch + turn_speed)
-    if keys.get(glfw.KEY_DOWN, False):
-        camera_pitch = max(-82.0, camera_pitch - turn_speed)
+    
+    if not cenital_view:
+        if keys.get(glfw.KEY_LEFT, False):
+            camera_yaw -= turn_speed
+        if keys.get(glfw.KEY_RIGHT, False):
+            camera_yaw += turn_speed
+        if keys.get(glfw.KEY_UP, False):
+            camera_pitch = min(8.0, camera_pitch + turn_speed)
+        if keys.get(glfw.KEY_DOWN, False):
+            camera_pitch = max(-82.0, camera_pitch - turn_speed)
 
 
 def main():
@@ -628,6 +745,8 @@ def main():
     glfw.make_context_current(window)
     glfw.set_key_callback(window, key_callback)
     glfw.set_scroll_callback(window, scroll_callback)
+    glfw.set_cursor_pos_callback(window, cursor_pos_callback)
+    glfw.set_mouse_button_callback(window, mouse_button_callback)
     glViewport(0, 0, width, height)
     init(width, height)
 
@@ -641,3 +760,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+main()
