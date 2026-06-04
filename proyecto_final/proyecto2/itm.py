@@ -977,17 +977,65 @@ def draw_field(points):
 
 
 def expand_polygon_world(points, overhang):
-    cx = sum(x for x, _ in points) / len(points)
-    cz = sum(z for _, z in points) / len(points)
+    points = normalized_polygon_points(points)
+    if len(points) < 3 or overhang <= 0.0:
+        return points
+
+    area = polygon_area_2d(points)
+    orientation = 1.0 if area >= 0.0 else -1.0
+    offset_edges = []
+
+    for i, (x1, z1) in enumerate(points):
+        x2, z2 = points[(i + 1) % len(points)]
+        edge_x = x2 - x1
+        edge_z = z2 - z1
+        edge_len = math.hypot(edge_x, edge_z)
+        if edge_len <= 1e-6:
+            continue
+
+        dir_x = edge_x / edge_len
+        dir_z = edge_z / edge_len
+        normal_x = dir_z * orientation
+        normal_z = -dir_x * orientation
+        offset_edges.append(
+            (
+                (x1 + normal_x * overhang, z1 + normal_z * overhang),
+                (x2 + normal_x * overhang, z2 + normal_z * overhang),
+                (dir_x, dir_z),
+            )
+        )
+
+    if len(offset_edges) != len(points):
+        return points
+
     expanded = []
-    for x, z in points:
-        dx = x - cx
-        dz = z - cz
-        length = math.hypot(dx, dz)
-        if length <= 1e-6:
-            expanded.append((x, z))
+    max_miter = overhang * 4.0
+    for i, point in enumerate(points):
+        prev_start, prev_end, prev_dir = offset_edges[i - 1]
+        curr_start, curr_end, curr_dir = offset_edges[i]
+        denom = prev_dir[0] * curr_dir[1] - prev_dir[1] * curr_dir[0]
+
+        if abs(denom) <= 1e-6:
+            candidate = (
+                (prev_end[0] + curr_start[0]) * 0.5,
+                (prev_end[1] + curr_start[1]) * 0.5,
+            )
         else:
-            expanded.append((x + dx / length * overhang, z + dz / length * overhang))
+            delta_x = curr_start[0] - prev_start[0]
+            delta_z = curr_start[1] - prev_start[1]
+            t = (delta_x * curr_dir[1] - delta_z * curr_dir[0]) / denom
+            candidate = (
+                prev_start[0] + prev_dir[0] * t,
+                prev_start[1] + prev_dir[1] * t,
+            )
+
+        if math.hypot(candidate[0] - point[0], candidate[1] - point[1]) > max_miter:
+            candidate = (
+                (prev_end[0] + curr_start[0]) * 0.5,
+                (prev_end[1] + curr_start[1]) * 0.5,
+            )
+        expanded.append(candidate)
+
     return expanded
 
 
