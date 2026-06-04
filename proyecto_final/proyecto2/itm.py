@@ -32,6 +32,7 @@ BUILDING_HEIGHT_SCALE = 0.65
 COLLISION_RADIUS = 0.08
 MOUSE_SENSITIVITY = 0.12
 DOUBLE_TAP_SECONDS = 0.32
+SPRINT_MULTIPLIER = 1.85
 FALL_GRAVITY = 4.8
 TERMINAL_FALL_SPEED = 5.5
 ROOF_OVERHANG = 0.08
@@ -74,6 +75,8 @@ flight_mode = False
 gesture_mode = False
 gesture_controller = None
 last_space_press = -10.0
+last_forward_press = -10.0
+sprint_forward = False
 roof_descent_mode = False
 falling_mode = False
 ground_override_mode = False
@@ -674,8 +677,13 @@ def key_callback(window, key, scancode, action, mods):
     global cenital_view, camera_pitch, camera_yaw, orange_mode, first_mouse
     global flight_mode, last_space_press, roof_descent_mode
     global falling_mode, ground_override_mode, fall_velocity
+    global last_forward_press, sprint_forward
     if action == glfw.PRESS:
         keys[key] = True
+        if key == glfw.KEY_W and not cenital_view:
+            now = glfw.get_time()
+            sprint_forward = now - last_forward_press <= DOUBLE_TAP_SECONDS
+            last_forward_press = -10.0 if sprint_forward else now
         if key == glfw.KEY_ESCAPE:
             glfw.set_window_should_close(window, True)
         if key == glfw.KEY_G:
@@ -720,6 +728,8 @@ def key_callback(window, key, scancode, action, mods):
                     glfw.set_input_mode(window, glfw.CURSOR, glfw.CURSOR_DISABLED)
     elif action == glfw.RELEASE:
         keys[key] = False
+        if key == glfw.KEY_W:
+            sprint_forward = False
 
 
 def cursor_pos_callback(window, xpos, ypos):
@@ -1770,6 +1780,9 @@ def process_input(delta_time):
         move_len = math.hypot(move_x, move_z)
         if move_len > 0.0:
             walk_speed = frame_speed
+            keyboard_forward = keys.get(glfw.KEY_W, False) and (not gesture_mode or gesture["gesture"] == "none")
+            if sprint_forward and keyboard_forward:
+                walk_speed *= SPRINT_MULTIPLIER
             if gesture_mode and gesture["gesture"] == "index_point":
                 walk_speed *= GESTURE_WALK_MULTIPLIER
             try_walk(move_x / move_len * walk_speed, move_z / move_len * walk_speed)
@@ -1836,12 +1849,14 @@ Controles - Campus ITM 3D
 =========================
 Movimiento:
   W / A / S / D        Caminar o desplazarse en vista cenital
+  Doble W              Correr hacia delante en modo persona
   Mouse                Mirar alrededor en modo persona
   Flechas izquierda/derecha  Girar camara con teclado
   Flechas arriba/abajo       Inclinar camara con teclado
 
 Vuelo creativo:
   Doble Space          Activar/desactivar vuelo
+  Doble W              Correr/avanzar rapido hacia delante
   Space                Subir mientras el vuelo esta activo
   Shift izquierdo/derecho    Bajar mientras el vuelo esta activo
   Shift sobre techo    Bajar del techo al suelo
