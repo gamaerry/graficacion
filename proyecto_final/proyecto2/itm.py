@@ -781,6 +781,18 @@ def polygon_area_2d(points):
     return area * 0.5
 
 
+def normalized_polygon_points(points):
+    clean = []
+    for point in points:
+        if not clean or math.hypot(point[0] - clean[-1][0], point[1] - clean[-1][1]) > 1e-6:
+            clean.append(point)
+
+    if len(clean) > 1 and math.hypot(clean[0][0] - clean[-1][0], clean[0][1] - clean[-1][1]) <= 1e-6:
+        clean.pop()
+
+    return clean
+
+
 def cross_2d(a, b, c):
     return (b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0])
 
@@ -795,6 +807,7 @@ def point_in_triangle(p, a, b, c):
 
 
 def triangulate_polygon(points):
+    points = normalized_polygon_points(points)
     if len(points) < 3:
         return []
     if len(points) == 3:
@@ -849,6 +862,15 @@ def draw_flat_polygon(points, color, y=0.01):
     for tri in triangulate_polygon(points):
         for p in tri:
             x, z = svg_to_world(p)
+            glVertex3f(x, y, z)
+    glEnd()
+
+
+def draw_filled_polygon_world(points, color, y):
+    color3(color)
+    glBegin(GL_TRIANGLES)
+    for tri in triangulate_polygon(points):
+        for x, z in tri:
             glVertex3f(x, y, z)
     glEnd()
 
@@ -1134,18 +1156,10 @@ def draw_prism(name, points, height, wall_color, roof_color):
     glEnd()
 
     # Losa de techo guinda sobresaliente.
-    color3(roof_color)
-    glBegin(GL_POLYGON)
-    for x, z in roof:
-        glVertex3f(x, height, z)
-    glEnd()
+    draw_filled_polygon_world(roof, roof_color, height)
 
     # Cara inferior de la losa para que el techo se vea solido desde abajo.
-    color3(shade_color(roof_color, 0.58))
-    glBegin(GL_POLYGON)
-    for x, z in reversed(roof):
-        glVertex3f(x, roof_bottom, z)
-    glEnd()
+    draw_filled_polygon_world(roof, shade_color(roof_color, 0.58), roof_bottom)
 
     # Faldilla vertical del techo para darle volumen hacia abajo.
     color3(shade_color(roof_color, 0.72))
