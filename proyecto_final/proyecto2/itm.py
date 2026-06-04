@@ -11,12 +11,32 @@ SCALE = 70.0
 
 keys = {}
 cenital_view = False
-unified_buildings = False
-camera_pos = [2.0, 24.0, 34.0]
-camera_yaw = -92.0
-camera_pitch = -23.0
-camera_speed = 0.45
-turn_speed = 1.8
+orange_mode = False
+EYE_HEIGHT = 0.35
+BUILDING_HEIGHT_SCALE = 0.65
+COLLISION_RADIUS = 0.18
+MOUSE_SENSITIVITY = 0.12
+DOUBLE_TAP_SECONDS = 0.32
+FALL_GRAVITY = 4.8
+TERMINAL_FALL_SPEED = 5.5
+
+camera_pos = [-1.5, EYE_HEIGHT, 5.4]
+camera_yaw = -88.0
+camera_pitch = -2.0
+camera_speed = 1.45
+fly_speed = 2.4
+turn_speed = 95.0
+mouse_look = True
+first_mouse = True
+last_mouse_x = 0.0
+last_mouse_y = 0.0
+walk_phase = 0.0
+flight_mode = False
+last_space_press = -10.0
+roof_descent_mode = False
+falling_mode = False
+ground_override_mode = False
+fall_velocity = 0.0
 
 GRAY_SURFACE = (0.82, 0.82, 0.82)
 EDGE_COLOR = (0.09, 0.09, 0.09)
@@ -24,7 +44,8 @@ CAMPUS_LAWN_COLOR = (0.77, 0.88, 0.70)
 LAWN_COLOR = (0.77, 0.88, 0.70)
 FIELD_COLOR = (0.62, 0.80, 0.22)
 TRACK_COLOR = (0.73, 0.56, 0.29)
-GROUND_COLOR = (1.0, 1.0, 1.0)
+GROUND_COLOR = (0.86, 0.90, 0.84)
+SKY_COLOR = (0.64, 0.78, 0.92)
 GREEN_Y = 0.01
 BASE_GREEN_Y = 0.005
 GRAY_Y = 0.045
@@ -210,29 +231,83 @@ SPORTS_FIELDS = [
 
 
 def key_callback(window, key, scancode, action, mods):
-    global cenital_view, camera_pitch, camera_yaw, unified_buildings
+    global cenital_view, camera_pitch, camera_yaw, orange_mode, first_mouse
+    global flight_mode, last_space_press, roof_descent_mode
+    global falling_mode, ground_override_mode, fall_velocity
     if action == glfw.PRESS:
         keys[key] = True
         if key == glfw.KEY_ESCAPE:
             glfw.set_window_should_close(window, True)
+        if key == glfw.KEY_SPACE and not cenital_view:
+            now = glfw.get_time()
+            if now - last_space_press <= DOUBLE_TAP_SECONDS:
+                flight_mode = not flight_mode
+                if flight_mode:
+                    roof_descent_mode = False
+                    falling_mode = False
+                    ground_override_mode = False
+                    fall_velocity = 0.0
+                    camera_pos[1] = max(camera_pos[1], standing_eye_height(camera_pos[0], camera_pos[2]) + 0.08)
+                    print("Vuelo creativo: ON")
+                else:
+                    roof_descent_mode = False
+                    ground_override_mode = False
+                    falling_mode = True
+                    fall_velocity = 0.0
+                    print("Vuelo creativo: OFF")
+                last_space_press = -10.0
+            else:
+                last_space_press = now
         if key == glfw.KEY_M:
-            unified_buildings = not unified_buildings
-            print(f"Edificios Unificados: {'ON' if unified_buildings else 'OFF'}")
+            orange_mode = not orange_mode
+            print(f"Modo Naranja: {'ON' if orange_mode else 'OFF'}")
         if key == glfw.KEY_C:
             cenital_view = not cenital_view
             if cenital_view:
+                flight_mode = False
+                roof_descent_mode = False
+                falling_mode = False
+                ground_override_mode = False
+                fall_velocity = 0.0
+                camera_pos[1] = 24.0
                 camera_pitch = -89.0
                 camera_yaw = -90.0
+                glfw.set_input_mode(window, glfw.CURSOR, glfw.CURSOR_NORMAL)
                 print("Vista Cenital: ON")
             else:
-                camera_pitch = -23.0
+                camera_pos[1] = standing_eye_height(camera_pos[0], camera_pos[2])
+                falling_mode = False
+                ground_override_mode = False
+                fall_velocity = 0.0
+                camera_pitch = -2.0
+                first_mouse = True
+                if mouse_look:
+                    glfw.set_input_mode(window, glfw.CURSOR, glfw.CURSOR_DISABLED)
                 print("Vista Cenital: OFF")
     elif action == glfw.RELEASE:
         keys[key] = False
 
 
 def cursor_pos_callback(window, xpos, ypos):
-    pass
+    global camera_yaw, camera_pitch, first_mouse, last_mouse_x, last_mouse_y
+    if cenital_view or not mouse_look:
+        first_mouse = True
+        return
+
+    if first_mouse:
+        last_mouse_x = xpos
+        last_mouse_y = ypos
+        first_mouse = False
+        return
+
+    dx = xpos - last_mouse_x
+    dy = ypos - last_mouse_y
+    last_mouse_x = xpos
+    last_mouse_y = ypos
+
+    camera_yaw += dx * MOUSE_SENSITIVITY
+    camera_pitch -= dy * MOUSE_SENSITIVITY
+    camera_pitch = max(-65.0, min(28.0, camera_pitch))
 
 
 def mouse_button_callback(window, button, action, mods):
@@ -240,7 +315,10 @@ def mouse_button_callback(window, button, action, mods):
 
 
 def scroll_callback(window, xoffset, yoffset):
-    camera_pos[1] = max(2.5, camera_pos[1] + yoffset * camera_speed * 2.0)
+    if not cenital_view and not flight_mode:
+        return
+    min_height = 6.0 if cenital_view else 0.12
+    camera_pos[1] = max(min_height, camera_pos[1] + yoffset * fly_speed * 0.35)
 
 
 def svg_to_world(point):
@@ -255,6 +333,10 @@ def world_to_svg(point):
 
 def color3(color):
     glColor3f(color[0], color[1], color[2])
+
+
+def shade_color(color, factor):
+    return tuple(max(0.0, min(1.0, component * factor)) for component in color)
 
 
 def polygon_area_2d(points):
@@ -440,42 +522,43 @@ def draw_field(points):
 
 def draw_prism(points, height, wall_color, roof_color):
     world = [svg_to_world(p) for p in points]
+    light_dir = (0.45, -0.55)
     
-    if unified_buildings:
-        # Modo Unificado: Un solo color y base alineada con el concreto
-        base_color = roof_color
-        color3(base_color)
-        glBegin(GL_QUADS)
-        for i, (x1, z1) in enumerate(world):
-            x2, z2 = world[(i + 1) % len(world)]
-            glVertex3f(x1, GRAY_Y, z1)
-            glVertex3f(x2, GRAY_Y, z2)
-            glVertex3f(x2, height, z2)
-            glVertex3f(x1, height, z1)
-        glEnd()
+    # Paredes con sombreado simple por orientacion.
+    glBegin(GL_QUADS)
+    for i, (x1, z1) in enumerate(world):
+        x2, z2 = world[(i + 1) % len(world)]
+        edge_x = x2 - x1
+        edge_z = z2 - z1
+        normal_x = edge_z
+        normal_z = -edge_x
+        normal_len = math.hypot(normal_x, normal_z) or 1.0
+        normal_x /= normal_len
+        normal_z /= normal_len
+        light = max(0.0, normal_x * light_dir[0] + normal_z * light_dir[1])
+        color3(shade_color(wall_color, 0.66 + light * 0.30))
+        glVertex3f(x1, 0.03, z1)
+        glVertex3f(x2, 0.03, z2)
+        glVertex3f(x2, height, z2)
+        glVertex3f(x1, height, z1)
+    glEnd()
 
-        glBegin(GL_POLYGON)
-        for x, z in world:
-            glVertex3f(x, height, z)
-        glEnd()
-    else:
-        # Modo Clásico: Paredes y techos distintos con contorno
-        color3(wall_color)
-        glBegin(GL_QUADS)
-        for i, (x1, z1) in enumerate(world):
-            x2, z2 = world[(i + 1) % len(world)]
-            glVertex3f(x1, 0.03, z1)
-            glVertex3f(x2, 0.03, z2)
-            glVertex3f(x2, height, z2)
-            glVertex3f(x1, height, z1)
-        glEnd()
-
-        color3(roof_color)
-        glBegin(GL_POLYGON)
-        for x, z in world:
-            glVertex3f(x, height, z)
-        glEnd()
-        draw_line_loop(points, (0.12, 0.10, 0.08), height + 0.01, 1.0)
+    # Techo.
+    color3(roof_color)
+    glBegin(GL_POLYGON)
+    for x, z in world:
+        glVertex3f(x, height, z)
+    glEnd()
+    
+    # Aristas verticales y contorno superior para leer mejor el volumen a nivel de calle.
+    color3((0.12, 0.10, 0.08))
+    glLineWidth(1.0)
+    glBegin(GL_LINES)
+    for x, z in world:
+        glVertex3f(x, 0.03, z)
+        glVertex3f(x, height, z)
+    glEnd()
+    draw_line_loop(points, (0.12, 0.10, 0.08), height + 0.01, 1.0)
 
 
 def draw_ground(size=42):
@@ -507,31 +590,51 @@ def draw_campus_base():
         draw_flat_polygon(walkway, GRAY_SURFACE, GRAY_Y)
 
 
-def draw_buildings():
-    for name, points, height in BUILDINGS:
-        tall = name in {"a", "i", "h", "af", "ag", "ah", "y"}
-        wall = (0.86, 0.50, 0.22) if not tall else (0.78, 0.40, 0.18)
-        roof = (0.96, 0.66, 0.32) if not tall else (0.90, 0.54, 0.24)
-        draw_prism(points, height, wall, roof)
+# Colores ITM Morelia
+ITM_YELLOW = (0.95, 0.82, 0.42)
+ITM_GUINDA = (0.50, 0.00, 0.00)
+ITM_GRAY_WALL = (0.80, 0.80, 0.80)
+ITM_GRAY_ROOF = (0.60, 0.60, 0.60)
 
-        if height > 1.25:
-            draw_window_band(points, height)
+
+def draw_buildings():
+    global orange_mode
+    for name, points, height in BUILDINGS:
+        real_height = height * BUILDING_HEIGHT_SCALE
+        if orange_mode:
+            # Modo Naranja Original (Todo el campus, incluido edificio A)
+            wall = (0.86, 0.50, 0.22)
+            roof = (0.96, 0.66, 0.32)
+        else:
+            # Modo Institucional (Todo el campus, incluido edificio A)
+            wall = ITM_YELLOW
+            roof = ITM_GUINDA
+            
+        draw_prism(points, real_height, wall, roof)
+
+        if real_height > 2.0:
+            draw_window_band(points, real_height)
 
 
 def draw_window_band(points, height):
     world = [svg_to_world(p) for p in points]
     color3((0.20, 0.24, 0.28))
+    glLineWidth(1.4)
     glBegin(GL_LINES)
-    for i in range(len(world)):
-        x1, z1 = world[i]
-        x2, z2 = world[(i + 1) % len(world)]
-        mx1 = x1 * 0.72 + x2 * 0.28
-        mz1 = z1 * 0.72 + z2 * 0.28
-        mx2 = x1 * 0.28 + x2 * 0.72
-        mz2 = z1 * 0.28 + z2 * 0.72
-        glVertex3f(mx1, height * 0.55, mz1)
-        glVertex3f(mx2, height * 0.55, mz2)
+    y = 0.95
+    while y < height - 0.55:
+        for i in range(len(world)):
+            x1, z1 = world[i]
+            x2, z2 = world[(i + 1) % len(world)]
+            mx1 = x1 * 0.80 + x2 * 0.20
+            mz1 = z1 * 0.80 + z2 * 0.20
+            mx2 = x1 * 0.20 + x2 * 0.80
+            mz2 = z1 * 0.20 + z2 * 0.80
+            glVertex3f(mx1, y, mz1)
+            glVertex3f(mx2, y, mz2)
+        y += 0.85
     glEnd()
+    glLineWidth(1.0)
 
 
 def draw_sports_fields():
@@ -640,13 +743,100 @@ def draw_compass():
     glPopMatrix()
 
 
+def surface_height_world(x, z):
+    svg_point = world_to_svg((x, z))
+    roof_height = 0.0
+    for _, points, height in BUILDINGS:
+        if is_point_in_poly(svg_point, points):
+            roof_height = max(roof_height, height * BUILDING_HEIGHT_SCALE)
+    return roof_height
+
+
+def body_surface_height_world(x, z):
+    roof_height = 0.0
+    for sample_x, sample_z in [
+        (x, z),
+        (x + COLLISION_RADIUS, z),
+        (x - COLLISION_RADIUS, z),
+        (x, z + COLLISION_RADIUS),
+        (x, z - COLLISION_RADIUS),
+    ]:
+        roof_height = max(roof_height, surface_height_world(sample_x, sample_z))
+    return roof_height
+
+
+def standing_eye_height(x, z):
+    return surface_height_world(x, z) + EYE_HEIGHT
+
+
+def landing_eye_height(x, z):
+    return body_surface_height_world(x, z) + EYE_HEIGHT
+
+
+def is_inside_building_world(x, z, building_points):
+    return is_point_in_poly(world_to_svg((x, z)), building_points)
+
+
+def body_overlaps_building_world(x, z):
+    samples = [
+        (x, z),
+        (x + COLLISION_RADIUS, z),
+        (x - COLLISION_RADIUS, z),
+        (x, z + COLLISION_RADIUS),
+        (x, z - COLLISION_RADIUS),
+    ]
+    for sample_x, sample_z in samples:
+        svg_point = world_to_svg((sample_x, sample_z))
+        if any(is_point_in_poly(svg_point, points) for _, points, _ in BUILDINGS):
+            return True
+    return False
+
+
+def is_blocked_world(x, z, y=None, current_x=None, current_z=None):
+    if current_x is not None and current_z is not None:
+        if surface_height_world(current_x, current_z) > 0.0:
+            return False
+
+    samples = [
+        (x, z),
+        (x + COLLISION_RADIUS, z),
+        (x - COLLISION_RADIUS, z),
+        (x, z + COLLISION_RADIUS),
+        (x, z - COLLISION_RADIUS),
+    ]
+    for sample in samples:
+        svg_point = world_to_svg(sample)
+        for _, points, height in BUILDINGS:
+            roof_height = height * BUILDING_HEIGHT_SCALE
+            foot_y = y - EYE_HEIGHT if y is not None else None
+            if foot_y is not None and foot_y >= roof_height - 0.04:
+                continue
+            if is_point_in_poly(svg_point, points):
+                if current_x is not None and current_z is not None:
+                    if is_inside_building_world(current_x, current_z, points):
+                        continue
+                return True
+    return False
+
+
+def try_walk(dx, dz):
+    next_x = camera_pos[0] + dx
+    next_z = camera_pos[2] + dz
+
+    # Probar por eje permite deslizarse por paredes en vez de quedarse pegado.
+    if not is_blocked_world(next_x, camera_pos[2], camera_pos[1], camera_pos[0], camera_pos[2]):
+        camera_pos[0] = next_x
+    if not is_blocked_world(camera_pos[0], next_z, camera_pos[1], camera_pos[0], camera_pos[2]):
+        camera_pos[2] = next_z
+
+
 def init(width, height):
-    glClearColor(GROUND_COLOR[0], GROUND_COLOR[1], GROUND_COLOR[2], 1.0)
+    glClearColor(SKY_COLOR[0], SKY_COLOR[1], SKY_COLOR[2], 1.0)
     glEnable(GL_DEPTH_TEST)
     glShadeModel(GL_FLAT)
     glMatrixMode(GL_PROJECTION)
     glLoadIdentity()
-    gluPerspective(60, width / height, 0.1, 200.0)
+    gluPerspective(72, width / height, 0.05, 200.0)
     glMatrixMode(GL_MODELVIEW)
 
 
@@ -661,13 +851,17 @@ def draw_scene(window):
     dir_y = math.sin(pitch)
     dir_z = math.cos(pitch) * math.sin(yaw)
     
+    eye_y = camera_pos[1]
+    if not cenital_view and camera_pos[1] <= EYE_HEIGHT + 0.03:
+        eye_y += math.sin(walk_phase) * 0.035
+
     look_x = camera_pos[0] + dir_x
-    look_y = camera_pos[1] + dir_y
+    look_y = eye_y + dir_y
     look_z = camera_pos[2] + dir_z
     
     gluLookAt(
         camera_pos[0],
-        camera_pos[1],
+        eye_y,
         camera_pos[2],
         look_x,
         look_y,
@@ -685,51 +879,133 @@ def draw_scene(window):
     glfw.swap_buffers(window)
 
 
-def process_input():
-    global camera_yaw, camera_pitch
+def process_input(delta_time):
+    global camera_yaw, camera_pitch, walk_phase, flight_mode, roof_descent_mode
+    global falling_mode, ground_override_mode, fall_velocity
+
+    frame_speed = camera_speed * delta_time
+    vertical_speed = fly_speed * delta_time
+    moved = False
+    shift_down = keys.get(glfw.KEY_LEFT_SHIFT, False) or keys.get(glfw.KEY_RIGHT_SHIFT, False)
 
     if cenital_view:
         # En vista cenital, el movimiento es puramente X/Z
         if keys.get(glfw.KEY_W, False):
-            camera_pos[2] -= camera_speed
+            camera_pos[2] -= frame_speed
         if keys.get(glfw.KEY_S, False):
-            camera_pos[2] += camera_speed
+            camera_pos[2] += frame_speed
         if keys.get(glfw.KEY_A, False):
-            camera_pos[0] -= camera_speed
+            camera_pos[0] -= frame_speed
         if keys.get(glfw.KEY_D, False):
-            camera_pos[0] += camera_speed
+            camera_pos[0] += frame_speed
     else:
+        if falling_mode:
+            landing_height = landing_eye_height(camera_pos[0], camera_pos[2])
+            fall_velocity = min(TERMINAL_FALL_SPEED, fall_velocity + FALL_GRAVITY * delta_time)
+            camera_pos[1] -= fall_velocity * delta_time
+            if camera_pos[1] <= landing_height:
+                camera_pos[1] = landing_height
+                falling_mode = False
+                fall_velocity = 0.0
+                roof_descent_mode = False
+                ground_override_mode = landing_height <= EYE_HEIGHT + 0.001 and body_overlaps_building_world(camera_pos[0], camera_pos[2])
+
+        if not flight_mode and not falling_mode:
+            surface_height = surface_height_world(camera_pos[0], camera_pos[2])
+            if ground_override_mode:
+                if surface_height <= 0.0:
+                    ground_override_mode = False
+                else:
+                    camera_pos[1] = EYE_HEIGHT
+
+            if not ground_override_mode and shift_down and surface_height > 0.0:
+                roof_descent_mode = True
+
+            if roof_descent_mode:
+                camera_pos[1] = max(EYE_HEIGHT, camera_pos[1] - vertical_speed)
+                if camera_pos[1] <= EYE_HEIGHT:
+                    roof_descent_mode = False
+                    ground_override_mode = True
+            else:
+                target_height = standing_eye_height(camera_pos[0], camera_pos[2])
+                if not ground_override_mode:
+                    if camera_pos[1] > target_height + 0.05:
+                        falling_mode = True
+                        fall_velocity = 0.0
+                    else:
+                        camera_pos[1] = target_height
+
         yaw = math.radians(camera_yaw)
         forward = [math.cos(yaw), math.sin(yaw)]
         right = [math.cos(yaw + math.pi / 2), math.sin(yaw + math.pi / 2)]
+        move_x = 0.0
+        move_z = 0.0
 
         if keys.get(glfw.KEY_W, False):
-            camera_pos[0] += forward[0] * camera_speed
-            camera_pos[2] += forward[1] * camera_speed
+            move_x += forward[0]
+            move_z += forward[1]
         if keys.get(glfw.KEY_S, False):
-            camera_pos[0] -= forward[0] * camera_speed
-            camera_pos[2] -= forward[1] * camera_speed
+            move_x -= forward[0]
+            move_z -= forward[1]
         if keys.get(glfw.KEY_A, False):
-            camera_pos[0] -= right[0] * camera_speed
-            camera_pos[2] -= right[1] * camera_speed
+            move_x -= right[0]
+            move_z -= right[1]
         if keys.get(glfw.KEY_D, False):
-            camera_pos[0] += right[0] * camera_speed
-            camera_pos[2] += right[1] * camera_speed
+            move_x += right[0]
+            move_z += right[1]
 
-    if keys.get(glfw.KEY_KP_8, False):
-        camera_pos[1] += camera_speed
-    if keys.get(glfw.KEY_KP_2, False):
-        camera_pos[1] = max(2.5, camera_pos[1] - camera_speed)
+        move_len = math.hypot(move_x, move_z)
+        if move_len > 0.0:
+            try_walk(move_x / move_len * frame_speed, move_z / move_len * frame_speed)
+            if not flight_mode and not falling_mode:
+                walk_phase += delta_time * 9.0
+                if not roof_descent_mode:
+                    if ground_override_mode:
+                        if surface_height_world(camera_pos[0], camera_pos[2]) <= 0.0:
+                            ground_override_mode = False
+                        camera_pos[1] = EYE_HEIGHT
+                    else:
+                        target_height = standing_eye_height(camera_pos[0], camera_pos[2])
+                        if camera_pos[1] > target_height + 0.05:
+                            falling_mode = True
+                            fall_velocity = 0.0
+                        else:
+                            camera_pos[1] = target_height
+            moved = True
+
+        if flight_mode and keys.get(glfw.KEY_SPACE, False):
+            camera_pos[1] += vertical_speed
+            moved = True
+        if flight_mode and shift_down:
+            landing_height = landing_eye_height(camera_pos[0], camera_pos[2])
+            camera_pos[1] = max(landing_height, camera_pos[1] - vertical_speed)
+            if camera_pos[1] <= landing_height:
+                flight_mode = False
+                roof_descent_mode = False
+                falling_mode = False
+                ground_override_mode = landing_height <= EYE_HEIGHT + 0.001 and body_overlaps_building_world(camera_pos[0], camera_pos[2])
+                fall_velocity = 0.0
+                print("Vuelo creativo: OFF")
+            moved = True
+
+    if cenital_view:
+        if keys.get(glfw.KEY_KP_8, False):
+            camera_pos[1] += frame_speed
+        if keys.get(glfw.KEY_KP_2, False):
+            camera_pos[1] = max(6.0, camera_pos[1] - frame_speed)
     
     if not cenital_view:
         if keys.get(glfw.KEY_LEFT, False):
-            camera_yaw -= turn_speed
+            camera_yaw -= turn_speed * delta_time
         if keys.get(glfw.KEY_RIGHT, False):
-            camera_yaw += turn_speed
+            camera_yaw += turn_speed * delta_time
         if keys.get(glfw.KEY_UP, False):
-            camera_pitch = min(8.0, camera_pitch + turn_speed)
+            camera_pitch = min(28.0, camera_pitch + turn_speed * delta_time)
         if keys.get(glfw.KEY_DOWN, False):
-            camera_pitch = max(-82.0, camera_pitch - turn_speed)
+            camera_pitch = max(-65.0, camera_pitch - turn_speed * delta_time)
+
+    if not moved:
+        walk_phase *= 0.92
 
 
 def main():
@@ -747,11 +1023,18 @@ def main():
     glfw.set_scroll_callback(window, scroll_callback)
     glfw.set_cursor_pos_callback(window, cursor_pos_callback)
     glfw.set_mouse_button_callback(window, mouse_button_callback)
+    glfw.set_input_mode(window, glfw.CURSOR, glfw.CURSOR_DISABLED)
+    glfw.swap_interval(1)
     glViewport(0, 0, width, height)
     init(width, height)
 
+    previous_time = glfw.get_time()
     while not glfw.window_should_close(window):
-        process_input()
+        current_time = glfw.get_time()
+        delta_time = min(current_time - previous_time, 0.05)
+        previous_time = current_time
+
+        process_input(delta_time)
         draw_scene(window)
         glfw.poll_events()
 
@@ -760,4 +1043,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-main()
