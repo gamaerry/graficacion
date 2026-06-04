@@ -21,6 +21,10 @@ FALL_GRAVITY = 4.8
 TERMINAL_FALL_SPEED = 5.5
 ROOF_OVERHANG = 0.08
 ROOF_THICKNESS = 0.13
+LABEL_HEIGHT = 0.16
+LABEL_DEPTH_OFFSET = 0.004
+LABEL_MARGIN = 0.025
+LABEL_STROKE_WIDTH = 0.18
 
 camera_pos = [-1.5, EYE_HEIGHT, 5.4]
 camera_yaw = -88.0
@@ -561,7 +565,146 @@ def expand_polygon_world(points, overhang):
     return expanded
 
 
-def draw_prism(points, height, wall_color, roof_color):
+STROKE_GLYPHS = {
+    "0": [((0.15, 0.10), (0.85, 0.10)), ((0.85, 0.10), (0.85, 0.90)), ((0.85, 0.90), (0.15, 0.90)), ((0.15, 0.90), (0.15, 0.10))],
+    "1": [((0.50, 0.10), (0.50, 0.90)), ((0.35, 0.75), (0.50, 0.90)), ((0.35, 0.10), (0.65, 0.10))],
+    "2": [((0.15, 0.80), (0.35, 0.90)), ((0.35, 0.90), (0.85, 0.90)), ((0.85, 0.90), (0.85, 0.55)), ((0.85, 0.55), (0.15, 0.10)), ((0.15, 0.10), (0.85, 0.10))],
+    "3": [((0.15, 0.90), (0.85, 0.90)), ((0.85, 0.90), (0.65, 0.55)), ((0.65, 0.55), (0.85, 0.10)), ((0.85, 0.10), (0.15, 0.10)), ((0.35, 0.52), (0.72, 0.52))],
+    "A": [((0.15, 0.10), (0.50, 0.90)), ((0.50, 0.90), (0.85, 0.10)), ((0.30, 0.45), (0.70, 0.45))],
+    "B": [((0.15, 0.10), (0.15, 0.90)), ((0.15, 0.90), (0.70, 0.90)), ((0.70, 0.90), (0.85, 0.70)), ((0.85, 0.70), (0.70, 0.52)), ((0.70, 0.52), (0.15, 0.52)), ((0.70, 0.52), (0.85, 0.30)), ((0.85, 0.30), (0.70, 0.10)), ((0.70, 0.10), (0.15, 0.10))],
+    "C": [((0.85, 0.82), (0.65, 0.90)), ((0.65, 0.90), (0.20, 0.90)), ((0.20, 0.90), (0.15, 0.10)), ((0.15, 0.10), (0.65, 0.10)), ((0.65, 0.10), (0.85, 0.18))],
+    "D": [((0.15, 0.10), (0.15, 0.90)), ((0.15, 0.90), (0.65, 0.90)), ((0.65, 0.90), (0.85, 0.70)), ((0.85, 0.70), (0.85, 0.30)), ((0.85, 0.30), (0.65, 0.10)), ((0.65, 0.10), (0.15, 0.10))],
+    "E": [((0.85, 0.90), (0.15, 0.90)), ((0.15, 0.90), (0.15, 0.10)), ((0.15, 0.52), (0.70, 0.52)), ((0.15, 0.10), (0.85, 0.10))],
+    "F": [((0.15, 0.10), (0.15, 0.90)), ((0.15, 0.90), (0.85, 0.90)), ((0.15, 0.52), (0.70, 0.52))],
+    "G": [((0.85, 0.80), (0.65, 0.90)), ((0.65, 0.90), (0.20, 0.90)), ((0.20, 0.90), (0.15, 0.10)), ((0.15, 0.10), (0.80, 0.10)), ((0.80, 0.10), (0.80, 0.45)), ((0.80, 0.45), (0.50, 0.45))],
+    "H": [((0.15, 0.10), (0.15, 0.90)), ((0.85, 0.10), (0.85, 0.90)), ((0.15, 0.52), (0.85, 0.52))],
+    "I": [((0.20, 0.90), (0.80, 0.90)), ((0.50, 0.90), (0.50, 0.10)), ((0.20, 0.10), (0.80, 0.10))],
+    "J": [((0.80, 0.90), (0.80, 0.20)), ((0.80, 0.20), (0.65, 0.10)), ((0.65, 0.10), (0.30, 0.10)), ((0.30, 0.10), (0.15, 0.25))],
+    "K": [((0.15, 0.10), (0.15, 0.90)), ((0.85, 0.90), (0.15, 0.52)), ((0.15, 0.52), (0.85, 0.10))],
+    "L": [((0.15, 0.90), (0.15, 0.10)), ((0.15, 0.10), (0.85, 0.10))],
+    "M": [((0.12, 0.10), (0.12, 0.90)), ((0.12, 0.90), (0.50, 0.45)), ((0.50, 0.45), (0.88, 0.90)), ((0.88, 0.90), (0.88, 0.10))],
+    "N": [((0.15, 0.10), (0.15, 0.90)), ((0.15, 0.90), (0.85, 0.10)), ((0.85, 0.10), (0.85, 0.90))],
+    "Ñ": [((0.15, 0.10), (0.15, 0.78)), ((0.15, 0.78), (0.85, 0.10)), ((0.85, 0.10), (0.85, 0.78)), ((0.25, 0.92), (0.40, 0.98)), ((0.40, 0.98), (0.60, 0.90)), ((0.60, 0.90), (0.75, 0.96))],
+    "O": [((0.20, 0.10), (0.80, 0.10)), ((0.80, 0.10), (0.85, 0.85)), ((0.85, 0.85), (0.20, 0.90)), ((0.20, 0.90), (0.15, 0.15)), ((0.15, 0.15), (0.20, 0.10))],
+    "P": [((0.15, 0.10), (0.15, 0.90)), ((0.15, 0.90), (0.75, 0.90)), ((0.75, 0.90), (0.85, 0.65)), ((0.85, 0.65), (0.75, 0.52)), ((0.75, 0.52), (0.15, 0.52))],
+    "Q": [((0.20, 0.10), (0.80, 0.10)), ((0.80, 0.10), (0.85, 0.85)), ((0.85, 0.85), (0.20, 0.90)), ((0.20, 0.90), (0.15, 0.15)), ((0.15, 0.15), (0.20, 0.10)), ((0.58, 0.28), (0.88, 0.02))],
+    "R": [((0.15, 0.10), (0.15, 0.90)), ((0.15, 0.90), (0.75, 0.90)), ((0.75, 0.90), (0.85, 0.65)), ((0.85, 0.65), (0.75, 0.52)), ((0.75, 0.52), (0.15, 0.52)), ((0.15, 0.52), (0.85, 0.10))],
+    "S": [((0.85, 0.85), (0.65, 0.90)), ((0.65, 0.90), (0.20, 0.90)), ((0.20, 0.90), (0.15, 0.55)), ((0.15, 0.55), (0.80, 0.45)), ((0.80, 0.45), (0.85, 0.10)), ((0.85, 0.10), (0.20, 0.10))],
+    "T": [((0.15, 0.90), (0.85, 0.90)), ((0.50, 0.90), (0.50, 0.10))],
+    "U": [((0.15, 0.90), (0.15, 0.20)), ((0.15, 0.20), (0.30, 0.10)), ((0.30, 0.10), (0.70, 0.10)), ((0.70, 0.10), (0.85, 0.20)), ((0.85, 0.20), (0.85, 0.90))],
+    "V": [((0.15, 0.90), (0.50, 0.10)), ((0.50, 0.10), (0.85, 0.90))],
+    "W": [((0.12, 0.90), (0.28, 0.10)), ((0.28, 0.10), (0.50, 0.48)), ((0.50, 0.48), (0.72, 0.10)), ((0.72, 0.10), (0.88, 0.90))],
+    "X": [((0.15, 0.90), (0.85, 0.10)), ((0.85, 0.90), (0.15, 0.10))],
+    "Y": [((0.15, 0.90), (0.50, 0.52)), ((0.85, 0.90), (0.50, 0.52)), ((0.50, 0.52), (0.50, 0.10))],
+    "Z": [((0.15, 0.90), (0.85, 0.90)), ((0.85, 0.90), (0.15, 0.10)), ((0.15, 0.10), (0.85, 0.10))],
+}
+
+
+def building_label(name):
+    if name == "ene":
+        return "Ñ"
+    return name.upper()
+
+
+def label_point(origin, axis, normal, x, y):
+    ox, oy, oz = origin
+    ax, az = axis
+    nx, nz = normal
+    return (ox + ax * x + nx * LABEL_DEPTH_OFFSET, oy + y, oz + az * x + nz * LABEL_DEPTH_OFFSET)
+
+
+def emit_label_stroke(origin, axis, normal, x1, y1, x2, y2, thickness):
+    dx = x2 - x1
+    dy = y2 - y1
+    length = math.hypot(dx, dy)
+    if length <= 1e-6:
+        return
+
+    nx = -dy / length * thickness * 0.5
+    ny = dx / length * thickness * 0.5
+    for px, py in (
+        (x1 + nx, y1 + ny),
+        (x2 + nx, y2 + ny),
+        (x2 - nx, y2 - ny),
+        (x1 - nx, y1 - ny),
+    ):
+        glVertex3f(*label_point(origin, axis, normal, px, py))
+
+
+def draw_stroke_label(label, origin, axis, normal, width, height):
+    char_count = max(1, len(label))
+    glyph_width = width / (char_count + (char_count - 1) * 0.20)
+    spacing = glyph_width * 0.20
+    thickness = min(glyph_width, height) * LABEL_STROKE_WIDTH
+    color3((1.0, 1.0, 1.0))
+    glBegin(GL_QUADS)
+    cursor_x = 0.0
+    for char in label:
+        for (x1, y1), (x2, y2) in STROKE_GLYPHS.get(char, []):
+            emit_label_stroke(
+                origin,
+                axis,
+                normal,
+                cursor_x + x1 * glyph_width,
+                y1 * height,
+                cursor_x + x2 * glyph_width,
+                y2 * height,
+                thickness,
+            )
+        cursor_x += glyph_width + spacing
+    glEnd()
+
+
+def draw_building_label(name, world, wall_height, roof_color):
+    label = building_label(name)
+    best_a, best_b = max(
+        ((world[i], world[(i + 1) % len(world)]) for i in range(len(world))),
+        key=lambda edge: (edge[0][1] + edge[1][1]) * 0.5,
+    )
+    ax, az = best_a
+    bx, bz = best_b
+    if ax > bx:
+        ax, az, bx, bz = bx, bz, ax, az
+
+    edge_dx = bx - ax
+    edge_dz = bz - az
+    edge_len = math.hypot(edge_dx, edge_dz)
+    if edge_len <= LABEL_MARGIN * 2.0:
+        return
+
+    axis = (edge_dx / edge_len, edge_dz / edge_len)
+    normal_a = (-axis[1], axis[0])
+    normal_b = (axis[1], -axis[0])
+    normal = normal_a if normal_a[1] >= normal_b[1] else normal_b
+
+    label_h = min(LABEL_HEIGHT, max(0.08, wall_height - 0.08))
+    label_w = max(label_h, label_h * (0.70 * len(label) + 0.35))
+    label_w = min(label_w, max(0.10, edge_len - LABEL_MARGIN * 2.0))
+    left_x = LABEL_MARGIN
+
+    bottom_y = max(0.045, wall_height - label_h - 0.04)
+    origin = (ax, bottom_y, az)
+
+    color3(roof_color)
+    glBegin(GL_QUADS)
+    for px, py in (
+        (left_x, 0.0),
+        (left_x + label_w, 0.0),
+        (left_x + label_w, label_h),
+        (left_x, label_h),
+    ):
+        glVertex3f(*label_point(origin, axis, normal, px, py))
+    glEnd()
+
+    text_origin = (
+        origin[0] + axis[0] * (left_x + label_w * 0.12) + normal[0] * 0.002,
+        origin[1] + label_h * 0.12,
+        origin[2] + axis[1] * (left_x + label_w * 0.12) + normal[1] * 0.002,
+    )
+    draw_stroke_label(label, text_origin, axis, normal, label_w * 0.76, label_h * 0.76)
+
+
+def draw_prism(name, points, height, wall_color, roof_color):
     world = [svg_to_world(p) for p in points]
     roof = expand_polygon_world(world, ROOF_OVERHANG)
     roof_bottom = max(0.06, height - ROOF_THICKNESS)
@@ -621,6 +764,7 @@ def draw_prism(points, height, wall_color, roof_color):
     glEnd()
     draw_polyline_world(roof, (0.12, 0.10, 0.08), height + 0.01, 1.0, True)
     draw_polyline_world(roof, (0.12, 0.10, 0.08), roof_bottom + 0.005, 1.0, True)
+    draw_building_label(name, world, roof_bottom, roof_color)
 
 
 def draw_ground(size=42):
@@ -736,7 +880,7 @@ def draw_buildings():
             wall = ITM_YELLOW
             roof = ITM_GUINDA
             
-        draw_prism(points, real_height, wall, roof)
+        draw_prism(name, points, real_height, wall, roof)
 
         if real_height > 2.0:
             draw_window_band(points, real_height)
