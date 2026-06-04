@@ -1,13 +1,28 @@
 import math
+import os
 import sys
+import threading
+import time
 
 import glfw
 from OpenGL.GL import *
 from OpenGL.GLU import gluLookAt, gluPerspective
 
+try:
+    import cv2
+    import mediapipe as mp
+    from mediapipe.tasks import python
+    from mediapipe.tasks.python import vision
+except ImportError:
+    cv2 = None
+    mp = None
+    python = None
+    vision = None
+
 
 SVG_W, SVG_H = 2213.0, 2135.0
 SCALE = 70.0
+MODEL_PATH = os.environ.get("HAND_LANDMARKER_MODEL", "hand_landmarker.task")
 
 keys = {}
 cenital_view = False
@@ -25,6 +40,23 @@ LABEL_HEIGHT = 0.16
 LABEL_DEPTH_OFFSET = 0.004
 LABEL_MARGIN = 0.025
 LABEL_STROKE_WIDTH = 0.18
+GESTURE_CAMERA_WIDTH = 320
+GESTURE_CAMERA_HEIGHT = 240
+GESTURE_TARGET_FPS = 20.0
+GESTURE_DEADZONE = 0.12
+GESTURE_TURN_MULTIPLIER = 1.15
+GESTURE_WALK_MULTIPLIER = 0.45
+GESTURE_PAN_MULTIPLIER = 2.4
+GESTURE_DEBUG_WINDOW = "Debug gestos ITM"
+
+HAND_CONNECTIONS = (
+    (0, 1), (1, 2), (2, 3), (3, 4),
+    (0, 5), (5, 6), (6, 7), (7, 8),
+    (5, 9), (9, 10), (10, 11), (11, 12),
+    (9, 13), (13, 14), (14, 15), (15, 16),
+    (13, 17), (17, 18), (18, 19), (19, 20),
+    (0, 17),
+)
 
 camera_pos = [-1.5, EYE_HEIGHT, 5.4]
 camera_yaw = -88.0
@@ -39,6 +71,8 @@ last_mouse_y = 0.0
 walk_phase = 0.0
 walk_bob_amount = 0.0
 flight_mode = False
+gesture_mode = False
+gesture_controller = None
 last_space_press = -10.0
 roof_descent_mode = False
 falling_mode = False
@@ -262,6 +296,380 @@ SPORTS_FIELDS = [
 ]
 
 
+def clamp(value, low, high):
+    return max(low, min(high, value))
+
+
+def empty_gesture_command():
+    return {
+        "gesture": "none",
+        "steer_x": 0.0,
+        "steer_y": 0.0,
+        "pan_x": 0.0,
+        "pan_y": 0.0,
+        "seen_at": 0.0,
+    }
+
+
+def landmark_distance(a, b):
+    return math.hypot(a.x - b.x, a.y - b.y)
+
+
+def finger_extended(landmarks, tip_idx, pip_idx):
+    wrist = landmarks[0]
+    return landmark_distance(wrist, landmarks[tip_idx]) > landmark_distance(wrist, landmarks[pip_idx]) * 1.08
+
+
+def handedness_label(handedness):
+    if not handedness:
+        return ""
+    try:
+        first = handedness[0]
+    except (TypeError, IndexError):
+        first = handedness
+    return getattr(first, "category_name", "")
+
+
+def palm_facing_camera(landmarks, handedness):
+    wrist = landmarks[0]
+    index_mcp = landmarks[5]
+    pinky_mcp = landmarks[17]
+    cross_z = (
+        (index_mcp.x - wrist.x) * (pinky_mcp.y - wrist.y)
+        - (index_mcp.y - wrist.y) * (pinky_mcp.x - wrist.x)
+    )
+    detected_label = handedness_label(handedness)
+    orientation = cross_z
+    return orientation >= 0.0, orientation, f"Right fijo/{detected_label}"
+
+
+def classify_hand_gesture(landmarks, handedness=None):
+    wrist = landmarks[0]
+    index_tip = landmarks[8]
+    palm_x = (landmarks[0].x + landmarks[5].x + landmarks[9].x + landmarks[13].x + landmarks[17].x) / 5.0
+    palm_y = (landmarks[0].y + landmarks[5].y + landmarks[9].y + landmarks[13].y + landmarks[17].y) / 5.0
+
+    index_extended = finger_extended(landmarks, 8, 6)
+    middle_extended = finger_extended(landmarks, 12, 10)
+    ring_extended = finger_extended(landmarks, 16, 14)
+    pinky_extended = finger_extended(landmarks, 20, 18)
+    thumb_up = landmarks[4].y < landmarks[3].y - 0.035
+    thumb_open = landmark_distance(landmarks[4], landmarks[9]) > landmark_distance(landmarks[2], landmarks[9]) * 1.10
+
+    extended_count = sum([index_extended, middle_extended, ring_extended, pinky_extended])
+    is_palm_facing_camera, palm_orientation, hand_label = palm_facing_camera(landmarks, handedness)
+    index_only = index_extended and not middle_extended and not ring_extended and not pinky_extended
+    peace_sign = index_extended and middle_extended and not ring_extended and not pinky_extended
+    command = empty_gesture_command()
+    command["pan_x"] = clamp((palm_x - 0.5) / 0.35, -1.0, 1.0)
+    command["pan_y"] = clamp((palm_y - 0.5) / 0.35, -1.0, 1.0)
+    command["steer_x"] = clamp((index_tip.x - wrist.x) / 0.28, -1.0, 1.0)
+    command["steer_y"] = clamp((wrist.y - index_tip.y) / 0.28, -1.0, 1.0)
+    command["seen_at"] = time.monotonic()
+    command["debug"] = {
+        "index": index_extended,
+        "middle": middle_extended,
+        "ring": ring_extended,
+        "pinky": pinky_extended,
+        "thumb_up": thumb_up,
+        "thumb_open": thumb_open,
+        "extended_count": extended_count,
+        "palm_facing_camera": is_palm_facing_camera,
+        "palm_orientation": palm_orientation,
+        "hand_label": hand_label,
+        "peace_sign": peace_sign,
+    }
+
+    if peace_sign:
+        command["gesture"] = "peace_sign"
+    elif index_only:
+        command["gesture"] = "index_point"
+    elif extended_count == 0:
+        command["gesture"] = "fist"
+    elif extended_count >= 4:
+        if is_palm_facing_camera:
+            command["gesture"] = "open_palm"
+        else:
+            command["gesture"] = "open_palm_reversed"
+
+    return command
+
+
+def draw_debug_hand(frame, landmarks, command):
+    height, width, _ = frame.shape
+    points = []
+    for landmark in landmarks:
+        x = int(landmark.x * width)
+        y = int(landmark.y * height)
+        points.append((x, y))
+        cv2.circle(frame, (x, y), 3, (0, 255, 0), -1)
+
+    for start_idx, end_idx in HAND_CONNECTIONS:
+        cv2.line(frame, points[start_idx], points[end_idx], (255, 200, 0), 1)
+
+    wrist = points[0]
+    index_tip = points[8]
+    cv2.arrowedLine(frame, wrist, index_tip, (0, 0, 255), 2, tipLength=0.25)
+
+    debug = command.get("debug", {})
+    lines = [
+        f"gesto: {command.get('gesture', 'none')}",
+        f"steer: {command.get('steer_x', 0.0):+.2f}, {command.get('steer_y', 0.0):+.2f}",
+        f"pan: {command.get('pan_x', 0.0):+.2f}, {command.get('pan_y', 0.0):+.2f}",
+        "dedos: "
+        f"I={int(debug.get('index', False))} "
+        f"M={int(debug.get('middle', False))} "
+        f"A={int(debug.get('ring', False))} "
+        f"P={int(debug.get('pinky', False))}",
+        f"pulgar: up={int(debug.get('thumb_up', False))} open={int(debug.get('thumb_open', False))}",
+        f"palma_cam: {int(debug.get('palm_facing_camera', False))} "
+        f"ori={debug.get('palm_orientation', 0.0):+.3f} mano={debug.get('hand_label', '')}",
+        f"paz: {int(debug.get('peace_sign', False))}",
+        "q: cerrar debug / G: apagar gestos",
+    ]
+    for i, text in enumerate(lines):
+        y = 20 + i * 18
+        cv2.putText(frame, text, (8, y), cv2.FONT_HERSHEY_SIMPLEX, 0.48, (0, 0, 0), 3, cv2.LINE_AA)
+        cv2.putText(frame, text, (8, y), cv2.FONT_HERSHEY_SIMPLEX, 0.48, (255, 255, 255), 1, cv2.LINE_AA)
+
+
+def draw_debug_no_hand(frame):
+    text = "Sin mano detectada"
+    cv2.putText(frame, text, (8, 24), cv2.FONT_HERSHEY_SIMPLEX, 0.55, (0, 0, 0), 3, cv2.LINE_AA)
+    cv2.putText(frame, text, (8, 24), cv2.FONT_HERSHEY_SIMPLEX, 0.55, (255, 255, 255), 1, cv2.LINE_AA)
+
+
+class GestureController:
+    def __init__(self):
+        self.running = False
+        self.thread = None
+        self.lock = threading.Lock()
+        self.command = empty_gesture_command()
+        self.error = None
+
+    def start(self):
+        if self.running:
+            return True
+        if cv2 is None or mp is None or python is None or vision is None:
+            self.error = "Instala opencv-python y mediapipe para usar gestos."
+            return False
+        if not os.path.exists(MODEL_PATH):
+            self.error = f"No se encontro el modelo '{MODEL_PATH}'."
+            return False
+
+        self.running = True
+        self.thread = threading.Thread(target=self._run, daemon=True)
+        self.thread.start()
+        return True
+
+    def stop(self):
+        if not self.running:
+            return
+        self.running = False
+        if self.thread is not None:
+            self.thread.join(timeout=1.0)
+        self.thread = None
+        with self.lock:
+            self.command = empty_gesture_command()
+
+    def snapshot(self):
+        with self.lock:
+            return dict(self.command)
+
+    def _publish(self, command):
+        with self.lock:
+            self.command = command
+
+    def _run(self):
+        cap = cv2.VideoCapture(0)
+        cap.set(cv2.CAP_PROP_FRAME_WIDTH, GESTURE_CAMERA_WIDTH)
+        cap.set(cv2.CAP_PROP_FRAME_HEIGHT, GESTURE_CAMERA_HEIGHT)
+        cap.set(cv2.CAP_PROP_FPS, GESTURE_TARGET_FPS)
+
+        if not cap.isOpened():
+            self.error = "No se pudo abrir la camara."
+            self.running = False
+            return
+
+        options = vision.HandLandmarkerOptions(
+            base_options=python.BaseOptions(model_asset_path=MODEL_PATH),
+            running_mode=vision.RunningMode.VIDEO,
+            num_hands=1,
+            min_hand_detection_confidence=0.55,
+            min_hand_presence_confidence=0.55,
+            min_tracking_confidence=0.55,
+        )
+
+        frame_interval = 1.0 / GESTURE_TARGET_FPS
+        next_frame_time = 0.0
+        start_time = time.monotonic()
+        last_timestamp_ms = 0
+        show_debug = True
+
+        try:
+            with vision.HandLandmarker.create_from_options(options) as landmarker:
+                while self.running:
+                    now = time.monotonic()
+                    if now < next_frame_time:
+                        time.sleep(min(0.01, next_frame_time - now))
+                        continue
+                    next_frame_time = now + frame_interval
+
+                    ret, frame = cap.read()
+                    if not ret:
+                        self._publish(empty_gesture_command())
+                        continue
+
+                    frame = cv2.flip(frame, 1)
+                    frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+                    mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=frame_rgb)
+                    timestamp_ms = max(last_timestamp_ms + 1, int((now - start_time) * 1000))
+                    last_timestamp_ms = timestamp_ms
+
+                    result = landmarker.detect_for_video(mp_image, timestamp_ms)
+                    if result.hand_landmarks:
+                        handedness = result.handedness[0] if result.handedness else None
+                        command = classify_hand_gesture(result.hand_landmarks[0], handedness)
+                        self._publish(command)
+                        if show_debug:
+                            draw_debug_hand(frame, result.hand_landmarks[0], command)
+                    else:
+                        self._publish(empty_gesture_command())
+                        if show_debug:
+                            draw_debug_no_hand(frame)
+
+                    if show_debug:
+                        cv2.imshow(GESTURE_DEBUG_WINDOW, frame)
+                        if cv2.waitKey(1) & 0xFF == ord("q"):
+                            show_debug = False
+                            cv2.destroyWindow(GESTURE_DEBUG_WINDOW)
+        except Exception as exc:
+            self.error = str(exc)
+        finally:
+            cap.release()
+            try:
+                cv2.destroyWindow(GESTURE_DEBUG_WINDOW)
+            except cv2.error:
+                pass
+            self.running = False
+
+
+def current_gesture_command():
+    if not gesture_mode or gesture_controller is None:
+        return empty_gesture_command()
+    command = gesture_controller.snapshot()
+    if time.monotonic() - command.get("seen_at", 0.0) > 0.35:
+        return empty_gesture_command()
+    return command
+
+
+def is_ground_position_clear(x, z):
+    return (
+        not body_overlaps_building_world(x, z)
+        and not is_blocked_world(x, z, EYE_HEIGHT)
+        and not is_blocked_by_fence_world(x, z, EYE_HEIGHT)
+    )
+
+
+def nearest_clear_ground_position(x, z):
+    if is_ground_position_clear(x, z):
+        return x, z
+
+    for ring in range(1, 28):
+        radius = ring * 0.12
+        samples = max(12, ring * 8)
+        for sample in range(samples):
+            angle = (math.tau * sample) / samples
+            test_x = x + math.cos(angle) * radius
+            test_z = z + math.sin(angle) * radius
+            if is_ground_position_clear(test_x, test_z):
+                return test_x, test_z
+
+    return x, z
+
+
+def place_camera_on_ground():
+    global ground_override_mode, roof_descent_mode, falling_mode, fall_velocity
+
+    camera_pos[0], camera_pos[2] = nearest_clear_ground_position(camera_pos[0], camera_pos[2])
+    camera_pos[1] = EYE_HEIGHT
+    ground_override_mode = False
+    roof_descent_mode = False
+    falling_mode = False
+    fall_velocity = 0.0
+
+
+def set_normal_person_mode():
+    global cenital_view, flight_mode, camera_pitch, camera_yaw, first_mouse
+    global falling_mode, ground_override_mode, roof_descent_mode, fall_velocity
+
+    was_cenital = cenital_view
+    if cenital_view:
+        cenital_view = False
+        first_mouse = True
+        camera_pitch = -2.0
+    if was_cenital:
+        place_camera_on_ground()
+    elif flight_mode:
+        falling_mode = True
+        fall_velocity = 0.0
+        ground_override_mode = False
+        roof_descent_mode = False
+    else:
+        roof_descent_mode = False
+        if not falling_mode:
+            fall_velocity = 0.0
+    flight_mode = False
+
+
+def apply_gesture_mode_switch(gesture_name):
+    global cenital_view, flight_mode, camera_pitch, camera_yaw, first_mouse
+    global falling_mode, ground_override_mode, roof_descent_mode, fall_velocity
+
+    if gesture_name in ("index_point", "none"):
+        set_normal_person_mode()
+    elif gesture_name == "open_palm":
+        was_cenital = cenital_view
+        if cenital_view:
+            cenital_view = False
+            first_mouse = True
+            camera_pitch = -2.0
+        if not flight_mode:
+            if was_cenital:
+                place_camera_on_ground()
+                camera_pos[1] = EYE_HEIGHT + 0.08
+            else:
+                camera_pos[1] = max(camera_pos[1], standing_eye_height(camera_pos[0], camera_pos[2]) + 0.08)
+        flight_mode = True
+        falling_mode = False
+        ground_override_mode = False
+        roof_descent_mode = False
+        fall_velocity = 0.0
+    elif gesture_name == "peace_sign":
+        if not cenital_view:
+            cenital_view = True
+            flight_mode = False
+            falling_mode = False
+            ground_override_mode = False
+            roof_descent_mode = False
+            fall_velocity = 0.0
+            camera_pos[1] = 24.0
+            camera_pitch = -89.0
+            camera_yaw = -90.0
+
+
+def toggle_gesture_mode():
+    global gesture_mode, gesture_controller
+    if gesture_controller is None:
+        gesture_controller = GestureController()
+
+    if gesture_mode:
+        gesture_controller.stop()
+        gesture_mode = False
+    else:
+        gesture_mode = gesture_controller.start()
+
+
 def key_callback(window, key, scancode, action, mods):
     global cenital_view, camera_pitch, camera_yaw, orange_mode, first_mouse
     global flight_mode, last_space_press, roof_descent_mode
@@ -270,6 +678,8 @@ def key_callback(window, key, scancode, action, mods):
         keys[key] = True
         if key == glfw.KEY_ESCAPE:
             glfw.set_window_should_close(window, True)
+        if key == glfw.KEY_G:
+            toggle_gesture_mode()
         if key == glfw.KEY_SPACE and not cenital_view:
             now = glfw.get_time()
             if now - last_space_press <= DOUBLE_TAP_SECONDS:
@@ -280,19 +690,16 @@ def key_callback(window, key, scancode, action, mods):
                     ground_override_mode = False
                     fall_velocity = 0.0
                     camera_pos[1] = max(camera_pos[1], standing_eye_height(camera_pos[0], camera_pos[2]) + 0.08)
-                    print("Vuelo creativo: ON")
                 else:
                     roof_descent_mode = False
                     ground_override_mode = False
                     falling_mode = True
                     fall_velocity = 0.0
-                    print("Vuelo creativo: OFF")
                 last_space_press = -10.0
             else:
                 last_space_press = now
         if key == glfw.KEY_M:
             orange_mode = not orange_mode
-            print(f"Modo Naranja: {'ON' if orange_mode else 'OFF'}")
         if key == glfw.KEY_C:
             cenital_view = not cenital_view
             if cenital_view:
@@ -305,17 +712,12 @@ def key_callback(window, key, scancode, action, mods):
                 camera_pitch = -89.0
                 camera_yaw = -90.0
                 glfw.set_input_mode(window, glfw.CURSOR, glfw.CURSOR_NORMAL)
-                print("Vista Cenital: ON")
             else:
-                camera_pos[1] = standing_eye_height(camera_pos[0], camera_pos[2])
-                falling_mode = False
-                ground_override_mode = False
-                fall_velocity = 0.0
+                place_camera_on_ground()
                 camera_pitch = -2.0
                 first_mouse = True
                 if mouse_look:
                     glfw.set_input_mode(window, glfw.CURSOR, glfw.CURSOR_DISABLED)
-                print("Vista Cenital: OFF")
     elif action == glfw.RELEASE:
         keys[key] = False
 
@@ -1218,17 +1620,27 @@ def process_input(delta_time):
     vertical_speed = fly_speed * delta_time
     moved = False
     shift_down = keys.get(glfw.KEY_LEFT_SHIFT, False) or keys.get(glfw.KEY_RIGHT_SHIFT, False)
+    gesture = current_gesture_command()
+    if gesture_mode:
+        apply_gesture_mode_switch(gesture["gesture"])
 
     if cenital_view:
-        # En vista cenital, el movimiento es puramente X/Z
-        if keys.get(glfw.KEY_W, False):
-            camera_pos[2] -= frame_speed
-        if keys.get(glfw.KEY_S, False):
-            camera_pos[2] += frame_speed
-        if keys.get(glfw.KEY_A, False):
-            camera_pos[0] -= frame_speed
-        if keys.get(glfw.KEY_D, False):
-            camera_pos[0] += frame_speed
+        if gesture_mode and gesture["gesture"] == "peace_sign":
+            pan_x = 0.0 if abs(gesture["pan_x"]) < GESTURE_DEADZONE else gesture["pan_x"]
+            pan_y = 0.0 if abs(gesture["pan_y"]) < GESTURE_DEADZONE else gesture["pan_y"]
+            camera_pos[0] += pan_x * frame_speed * GESTURE_PAN_MULTIPLIER
+            camera_pos[2] += pan_y * frame_speed * GESTURE_PAN_MULTIPLIER
+            moved = abs(pan_x) > 0.0 or abs(pan_y) > 0.0
+        else:
+            # En vista cenital, el movimiento es puramente X/Z
+            if keys.get(glfw.KEY_W, False):
+                camera_pos[2] -= frame_speed
+            if keys.get(glfw.KEY_S, False):
+                camera_pos[2] += frame_speed
+            if keys.get(glfw.KEY_A, False):
+                camera_pos[0] -= frame_speed
+            if keys.get(glfw.KEY_D, False):
+                camera_pos[0] += frame_speed
     else:
         if falling_mode:
             landing_height = landing_eye_height(camera_pos[0], camera_pos[2])
@@ -1266,28 +1678,39 @@ def process_input(delta_time):
                     else:
                         camera_pos[1] = target_height
 
+        if gesture_mode and not flight_mode and gesture["gesture"] == "index_point":
+            steer_x = 0.0 if abs(gesture["steer_x"]) < GESTURE_DEADZONE else gesture["steer_x"]
+            camera_yaw += steer_x * turn_speed * GESTURE_TURN_MULTIPLIER * delta_time
+
         yaw = math.radians(camera_yaw)
         forward = [math.cos(yaw), math.sin(yaw)]
         right = [math.cos(yaw + math.pi / 2), math.sin(yaw + math.pi / 2)]
         move_x = 0.0
         move_z = 0.0
 
-        if keys.get(glfw.KEY_W, False):
+        if gesture_mode and not flight_mode and gesture["gesture"] == "index_point":
             move_x += forward[0]
             move_z += forward[1]
-        if keys.get(glfw.KEY_S, False):
-            move_x -= forward[0]
-            move_z -= forward[1]
-        if keys.get(glfw.KEY_A, False):
-            move_x -= right[0]
-            move_z -= right[1]
-        if keys.get(glfw.KEY_D, False):
-            move_x += right[0]
-            move_z += right[1]
+        elif not gesture_mode or gesture["gesture"] == "none":
+            if keys.get(glfw.KEY_W, False):
+                move_x += forward[0]
+                move_z += forward[1]
+            if keys.get(glfw.KEY_S, False):
+                move_x -= forward[0]
+                move_z -= forward[1]
+            if keys.get(glfw.KEY_A, False):
+                move_x -= right[0]
+                move_z -= right[1]
+            if keys.get(glfw.KEY_D, False):
+                move_x += right[0]
+                move_z += right[1]
 
         move_len = math.hypot(move_x, move_z)
         if move_len > 0.0:
-            try_walk(move_x / move_len * frame_speed, move_z / move_len * frame_speed)
+            walk_speed = frame_speed
+            if gesture_mode and gesture["gesture"] == "index_point":
+                walk_speed *= GESTURE_WALK_MULTIPLIER
+            try_walk(move_x / move_len * walk_speed, move_z / move_len * walk_speed)
             if not flight_mode and not falling_mode:
                 walk_phase += delta_time * 9.0
                 walk_bob_amount = min(1.0, walk_bob_amount + delta_time * 8.0)
@@ -1305,10 +1728,15 @@ def process_input(delta_time):
                             camera_pos[1] = target_height
             moved = True
 
-        if flight_mode and keys.get(glfw.KEY_SPACE, False):
+        gesture_ascend = gesture_mode and flight_mode and gesture["gesture"] == "open_palm"
+        gesture_descend = gesture_mode and flight_mode and gesture["gesture"] == "open_palm_reversed"
+        keyboard_ascend = not gesture_mode and flight_mode and keys.get(glfw.KEY_SPACE, False)
+        keyboard_descend = not gesture_mode and flight_mode and shift_down
+
+        if gesture_ascend or keyboard_ascend:
             camera_pos[1] += vertical_speed
             moved = True
-        if flight_mode and shift_down:
+        if gesture_descend or keyboard_descend:
             landing_height = landing_eye_height(camera_pos[0], camera_pos[2])
             camera_pos[1] = max(landing_height, camera_pos[1] - vertical_speed)
             if camera_pos[1] <= landing_height:
@@ -1317,7 +1745,6 @@ def process_input(delta_time):
                 falling_mode = False
                 ground_override_mode = landing_height <= EYE_HEIGHT + 0.001 and body_overlaps_building_world(camera_pos[0], camera_pos[2])
                 fall_velocity = 0.0
-                print("Vuelo creativo: OFF")
             moved = True
 
     if cenital_view:
@@ -1359,9 +1786,16 @@ Vuelo creativo:
   Rueda del mouse      Ajustar altura en vuelo o vista cenital
 
 Vistas y modos:
+  G                    Activar/desactivar control por gestos
   C                    Alternar vista cenital / persona
   KP_8 / KP_2          Subir/bajar camara en vista cenital
   M                    Alternar modo naranja / institucional
+
+Gestos con una mano:
+  Normal               Indice extendido: camina y gira al moverlo a los lados
+  Vuelo creativo       Palma abierta hacia la camara: subir; palma volteada hacia ti: bajar
+  Vista cenital        Amor y paz: mover la mano desplaza la camara
+  Sin mano             Vuelve a modo persona normal
 
 Sistema:
   Esc                  Salir
@@ -1402,6 +1836,8 @@ def main():
         draw_scene(window)
         glfw.poll_events()
 
+    if gesture_controller is not None:
+        gesture_controller.stop()
     glfw.terminate()
 
 
