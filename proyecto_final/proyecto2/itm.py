@@ -35,6 +35,7 @@ DOUBLE_TAP_SECONDS = 0.32
 SPRINT_MULTIPLIER = 1.85
 FALL_GRAVITY = 4.8
 TERMINAL_FALL_SPEED = 5.5
+JUMP_SPEED = 2.25
 ROOF_OVERHANG = 0.08
 ROOF_THICKNESS = 0.13
 LABEL_HEIGHT = 0.16
@@ -706,6 +707,7 @@ def key_callback(window, key, scancode, action, mods):
                 last_space_press = -10.0
             else:
                 last_space_press = now
+                start_jump()
         if key == glfw.KEY_M:
             orange_mode = not orange_mode
         if key == glfw.KEY_C:
@@ -1736,6 +1738,21 @@ def try_walk(dx, dz):
         camera_pos[2] = next_z
 
 
+def start_jump():
+    global falling_mode, roof_descent_mode, fall_velocity
+    if flight_mode or falling_mode or roof_descent_mode or ground_override_mode:
+        return
+
+    target_height = standing_eye_height(camera_pos[0], camera_pos[2])
+    if camera_pos[1] > target_height + 0.04:
+        return
+
+    camera_pos[1] = max(camera_pos[1], target_height)
+    roof_descent_mode = False
+    falling_mode = True
+    fall_velocity = -JUMP_SPEED
+
+
 def update_projection(width, height):
     height = max(1, height)
     glViewport(0, 0, width, height)
@@ -1963,6 +1980,7 @@ Controles - Campus ITM 3D
 Movimiento:
   W / A / S / D        Caminar o desplazarse en vista cenital
   Doble W              Correr hacia delante en modo persona
+  Space                Brincar en modo caminata
   Mouse                Mirar alrededor en modo persona
   Flechas izquierda/derecha  Girar camara con teclado
   Flechas arriba/abajo       Inclinar camara con teclado
