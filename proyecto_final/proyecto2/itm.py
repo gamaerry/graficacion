@@ -1480,6 +1480,118 @@ def draw_compass():
     glPopMatrix()
 
 
+HUD_GLYPHS = {
+    "A": ("01110", "10001", "10001", "11111", "10001", "10001", "10001"),
+    "B": ("11110", "10001", "10001", "11110", "10001", "10001", "11110"),
+    "C": ("01111", "10000", "10000", "10000", "10000", "10000", "01111"),
+    "D": ("11110", "10001", "10001", "10001", "10001", "10001", "11110"),
+    "E": ("11111", "10000", "10000", "11110", "10000", "10000", "11111"),
+    "F": ("11111", "10000", "10000", "11110", "10000", "10000", "10000"),
+    "G": ("01111", "10000", "10000", "10011", "10001", "10001", "01111"),
+    "H": ("10001", "10001", "10001", "11111", "10001", "10001", "10001"),
+    "I": ("11111", "00100", "00100", "00100", "00100", "00100", "11111"),
+    "J": ("00111", "00010", "00010", "00010", "00010", "10010", "01100"),
+    "K": ("10001", "10010", "10100", "11000", "10100", "10010", "10001"),
+    "L": ("10000", "10000", "10000", "10000", "10000", "10000", "11111"),
+    "M": ("10001", "11011", "10101", "10101", "10001", "10001", "10001"),
+    "N": ("10001", "11001", "10101", "10011", "10001", "10001", "10001"),
+    "O": ("01110", "10001", "10001", "10001", "10001", "10001", "01110"),
+    "P": ("11110", "10001", "10001", "11110", "10000", "10000", "10000"),
+    "Q": ("01110", "10001", "10001", "10001", "10101", "10010", "01101"),
+    "R": ("11110", "10001", "10001", "11110", "10100", "10010", "10001"),
+    "S": ("01111", "10000", "10000", "01110", "00001", "00001", "11110"),
+    "T": ("11111", "00100", "00100", "00100", "00100", "00100", "00100"),
+    "U": ("10001", "10001", "10001", "10001", "10001", "10001", "01110"),
+    "V": ("10001", "10001", "10001", "10001", "10001", "01010", "00100"),
+    "W": ("10001", "10001", "10001", "10101", "10101", "10101", "01010"),
+    "X": ("10001", "10001", "01010", "00100", "01010", "10001", "10001"),
+    "Y": ("10001", "10001", "01010", "00100", "00100", "00100", "00100"),
+    "Z": ("11111", "00001", "00010", "00100", "01000", "10000", "11111"),
+}
+
+
+def hud_text_width(text, pixel_size):
+    width = 0
+    for char in text:
+        width += 3 * pixel_size if char == " " else 6 * pixel_size
+    return max(0, width - pixel_size)
+
+
+def draw_hud_text(text, x, y, pixel_size, color):
+    color3(color)
+    glBegin(GL_QUADS)
+    cursor_x = x
+    for char in text:
+        if char == " ":
+            cursor_x += pixel_size * 3
+            continue
+
+        glyph = HUD_GLYPHS.get(char)
+        if glyph:
+            for row, pattern in enumerate(glyph):
+                for col, active in enumerate(pattern):
+                    if active != "1":
+                        continue
+                    px = cursor_x + col * pixel_size
+                    py = y + row * pixel_size
+                    glVertex2f(px, py)
+                    glVertex2f(px + pixel_size, py)
+                    glVertex2f(px + pixel_size, py + pixel_size)
+                    glVertex2f(px, py + pixel_size)
+        cursor_x += pixel_size * 6
+    glEnd()
+
+
+def draw_gesture_mode_badge(window):
+    if not gesture_mode:
+        return
+
+    width, height = glfw.get_framebuffer_size(window)
+    if width <= 0 or height <= 0:
+        return
+
+    glDisable(GL_DEPTH_TEST)
+    glMatrixMode(GL_PROJECTION)
+    glPushMatrix()
+    glLoadIdentity()
+    glOrtho(0, width, height, 0, -1, 1)
+    glMatrixMode(GL_MODELVIEW)
+    glPushMatrix()
+    glLoadIdentity()
+
+    text = "MODO GESTOS"
+    pixel_size = 3
+    text_w = hud_text_width(text, pixel_size)
+    text_h = pixel_size * 7
+    x, y = 16, 16
+    badge_w, badge_h = text_w + 28, text_h + 18
+    color3((0.08, 0.08, 0.08))
+    glBegin(GL_QUADS)
+    glVertex2f(x, y)
+    glVertex2f(x + badge_w, y)
+    glVertex2f(x + badge_w, y + badge_h)
+    glVertex2f(x, y + badge_h)
+    glEnd()
+
+    color3((0.92, 0.78, 0.26))
+    glLineWidth(2.0)
+    glBegin(GL_LINE_LOOP)
+    glVertex2f(x, y)
+    glVertex2f(x + badge_w, y)
+    glVertex2f(x + badge_w, y + badge_h)
+    glVertex2f(x, y + badge_h)
+    glEnd()
+    glLineWidth(1.0)
+
+    draw_hud_text(text, x + 14, y + 9, pixel_size, (0.92, 0.78, 0.26))
+
+    glPopMatrix()
+    glMatrixMode(GL_PROJECTION)
+    glPopMatrix()
+    glMatrixMode(GL_MODELVIEW)
+    glEnable(GL_DEPTH_TEST)
+
+
 def point_segment_distance_2d(point, a, b):
     px, pz = point
     ax, az = a
@@ -1681,6 +1793,7 @@ def draw_scene(window):
     draw_buildings()
     draw_trees()
     draw_compass()
+    draw_gesture_mode_badge(window)
     glfw.swap_buffers(window)
 
 
