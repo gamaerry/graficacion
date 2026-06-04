@@ -1150,14 +1150,24 @@ def try_walk(dx, dz):
         camera_pos[2] = next_z
 
 
-def init(width, height):
-    glClearColor(SKY_COLOR[0], SKY_COLOR[1], SKY_COLOR[2], 1.0)
-    glEnable(GL_DEPTH_TEST)
-    glShadeModel(GL_FLAT)
+def update_projection(width, height):
+    height = max(1, height)
+    glViewport(0, 0, width, height)
     glMatrixMode(GL_PROJECTION)
     glLoadIdentity()
     gluPerspective(72, width / height, 0.05, 200.0)
     glMatrixMode(GL_MODELVIEW)
+
+
+def framebuffer_size_callback(window, width, height):
+    update_projection(width, height)
+
+
+def init(width, height):
+    glClearColor(SKY_COLOR[0], SKY_COLOR[1], SKY_COLOR[2], 1.0)
+    glEnable(GL_DEPTH_TEST)
+    glShadeModel(GL_FLAT)
+    update_projection(width, height)
 
 
 def draw_scene(window):
@@ -1330,6 +1340,35 @@ def process_input(delta_time):
         walk_bob_amount = max(0.0, walk_bob_amount - delta_time * 10.0)
 
 
+def print_usage_tutorial():
+    print(
+        """
+Controles - Campus ITM 3D
+=========================
+Movimiento:
+  W / A / S / D        Caminar o desplazarse en vista cenital
+  Mouse                Mirar alrededor en modo persona
+  Flechas izquierda/derecha  Girar camara con teclado
+  Flechas arriba/abajo       Inclinar camara con teclado
+
+Vuelo creativo:
+  Doble Space          Activar/desactivar vuelo
+  Space                Subir mientras el vuelo esta activo
+  Shift izquierdo/derecho    Bajar mientras el vuelo esta activo
+  Shift sobre techo    Bajar del techo al suelo
+  Rueda del mouse      Ajustar altura en vuelo o vista cenital
+
+Vistas y modos:
+  C                    Alternar vista cenital / persona
+  KP_8 / KP_2          Subir/bajar camara en vista cenital
+  M                    Alternar modo naranja / institucional
+
+Sistema:
+  Esc                  Salir
+"""
+    )
+
+
 def main():
     if not glfw.init():
         sys.exit("No se pudo inicializar GLFW.")
@@ -1340,15 +1379,18 @@ def main():
         glfw.terminate()
         sys.exit("No se pudo crear la ventana.")
 
+    print_usage_tutorial()
+
     glfw.make_context_current(window)
     glfw.set_key_callback(window, key_callback)
     glfw.set_scroll_callback(window, scroll_callback)
     glfw.set_cursor_pos_callback(window, cursor_pos_callback)
     glfw.set_mouse_button_callback(window, mouse_button_callback)
+    glfw.set_framebuffer_size_callback(window, framebuffer_size_callback)
     glfw.set_input_mode(window, glfw.CURSOR, glfw.CURSOR_DISABLED)
     glfw.swap_interval(1)
-    glViewport(0, 0, width, height)
-    init(width, height)
+    framebuffer_width, framebuffer_height = glfw.get_framebuffer_size(window)
+    init(framebuffer_width, framebuffer_height)
 
     previous_time = glfw.get_time()
     while not glfw.window_should_close(window):
