@@ -12,13 +12,15 @@ SCALE = 70.0
 keys = {}
 cenital_view = False
 orange_mode = False
-EYE_HEIGHT = 0.35
+EYE_HEIGHT = 0.28
 BUILDING_HEIGHT_SCALE = 0.65
 COLLISION_RADIUS = 0.18
 MOUSE_SENSITIVITY = 0.12
 DOUBLE_TAP_SECONDS = 0.32
 FALL_GRAVITY = 4.8
 TERMINAL_FALL_SPEED = 5.5
+ROOF_OVERHANG = 0.08
+ROOF_THICKNESS = 0.13
 
 camera_pos = [-1.5, EYE_HEIGHT, 5.4]
 camera_yaw = -88.0
@@ -181,10 +183,10 @@ BUILDINGS = [
     ("2a", [(182, 660), (335, 663), (334, 706), (280, 705), (279, 749), (334, 750), (333, 794), (180, 791), (181, 747), (235, 748), (236, 704), (181, 703)], 1.1),
     ("f", [(998, 798), (1137, 801), (1136, 836), (997, 834)], 1.0),
     ("o", [(855, 1124), (988, 1126), (988, 1158), (854, 1156)], 1.0),
-    ("ene", [(726, 1119), (781, 1120), (780, 1181), (725, 1180)], 1.3),
+    ("ene", [(726, 1119), (781, 1120), (780, 1181), (725, 1180)], 1.0),
     ("p", [(790, 1179), (852, 1181), (851, 1215), (789, 1214)], 1.0),
-    ("r", [(1012, 1241), (1067, 1242), (1066, 1314), (1011, 1313)], 1.3),
-    ("v", [(1115, 1245), (1141, 1245), (1140, 1328), (1114, 1328)], 1.1),
+    ("r", [(1012, 1241), (1067, 1242), (1066, 1314), (1011, 1313)], 1.0),
+    ("v", [(1115, 1245), (1141, 1245), (1140, 1328), (1114, 1328)], 0.75),
     ("n", [(568, 1260), (570, 1133), (655, 1135), (653, 1262)], 1.2),
     ("m", [(496, 1258), (412, 1257), (415, 1130), (498, 1132)], 1.2),
     ("u", [(747, 1341), (790, 1342), (790, 1365), (912, 1360), (944, 1357), (942, 1424), (940, 1512), (908, 1511), (908, 1506), (786, 1490), (786, 1515), (743, 1514)], 1.4),
@@ -195,13 +197,13 @@ BUILDINGS = [
     ("q", [(1395, 1151), (1539, 1154), (1538, 1188), (1395, 1186)], 1.1),
     ("ab", [(1230, 1401), (1302, 1402), (1302, 1436), (1229, 1435), (1229, 1423)], 1.0),
     ("x", [(1106, 1367), (1184, 1368), (1183, 1403), (1105, 1402)], 1.0),
-    ("w", [(1151, 1240), (1176, 1241), (1175, 1287), (1150, 1287)], 0.9),
-    ("ac", [(1134, 1497), (1206, 1498), (1206, 1530), (1133, 1528)], 1.0),
-    ("ad", [(1133, 1573), (1201, 1574), (1200, 1607), (1133, 1606)], 1.0),
-    ("i", [(1016, 874), (1137, 876), (1134, 993), (1014, 990)], 1.6),
+    ("w", [(1151, 1240), (1176, 1241), (1175, 1287), (1150, 1287)], 0.75),
+    ("ac", [(1134, 1497), (1206, 1498), (1206, 1530), (1133, 1528)], 0.75),
+    ("ad", [(1133, 1573), (1201, 1574), (1200, 1607), (1133, 1606)], 0.75),
+    ("i", [(1016, 874), (1137, 876), (1134, 993), (1014, 990)], 0.75),
     ("s", [(444, 1267), (472, 1268), (472, 1292), (599, 1294), (599, 1269), (444, 1267)], 0.9),
     ("d", [(1096, 581), (1259, 584), (1258, 623), (1095, 620)], 1.0),
-    ("z", [(1193, 1252), (1229, 1253), (1228, 1311), (1246, 1312), (1245, 1338), (1190, 1337), (1191, 1311)], 1.0),
+    ("z", [(1193, 1252), (1229, 1253), (1228, 1311), (1246, 1312), (1245, 1338), (1190, 1337), (1191, 1311)], 0.75),
     ("s2", [(363, 1362), (386, 1362), (385, 1394), (362, 1394)], 0.7),
     ("ch", [(1090, 395), (1253, 398), (1252, 464), (1089, 461)], 1.4),
     ("a", [(850, 533), (965, 535), (964, 611), (934, 611), (933, 645), (963, 646), (962, 728), (846, 726), (848, 644), (877, 644), (877, 609), (848, 609)], 1.7),
@@ -213,7 +215,7 @@ BUILDINGS = [
     ("k", [(967, 1024), (978, 1024), (978, 1011), (999, 1011), (998, 1025), (1157, 1028), (1157, 1051), (966, 1047)], 1.0),
     ("g", [(1238, 739), (1318, 741), (1315, 895), (1235, 893)], 1.5),
     ("s3", [(1335, 750), (1366, 751), (1365, 785), (1334, 784)], 0.7),
-    ("ll", [(878, 1202), (975, 1204), (973, 1288), (876, 1286)], 1.4),
+    ("ll", [(878, 1202), (975, 1204), (973, 1288), (876, 1286)], 1.0),
     ("ag", [(1547, 408), (1546, 570), (1481, 570), (1482, 407)], 1.3),
     ("t", [(592, 1379), (699, 1381), (698, 1461), (591, 1459)], 1.2),
     ("2g", [(419, 342), (455, 343), (452, 476), (416, 475)], 1.2),
@@ -317,7 +319,7 @@ def mouse_button_callback(window, button, action, mods):
 def scroll_callback(window, xoffset, yoffset):
     if not cenital_view and not flight_mode:
         return
-    min_height = 6.0 if cenital_view else 0.12
+    min_height = 6.0 if cenital_view else EYE_HEIGHT
     camera_pos[1] = max(min_height, camera_pos[1] + yoffset * fly_speed * 0.35)
 
 
@@ -520,8 +522,25 @@ def draw_field(points):
         draw_polyline_world([box_a, box_b, box_c, box_d], (0.96, 0.96, 0.92), SPORT_Y + 0.05, 1.2, True)
 
 
+def expand_polygon_world(points, overhang):
+    cx = sum(x for x, _ in points) / len(points)
+    cz = sum(z for _, z in points) / len(points)
+    expanded = []
+    for x, z in points:
+        dx = x - cx
+        dz = z - cz
+        length = math.hypot(dx, dz)
+        if length <= 1e-6:
+            expanded.append((x, z))
+        else:
+            expanded.append((x + dx / length * overhang, z + dz / length * overhang))
+    return expanded
+
+
 def draw_prism(points, height, wall_color, roof_color):
     world = [svg_to_world(p) for p in points]
+    roof = expand_polygon_world(world, ROOF_OVERHANG)
+    roof_bottom = max(0.06, height - ROOF_THICKNESS)
     light_dir = (0.45, -0.55)
     
     # Paredes con sombreado simple por orientacion.
@@ -539,15 +558,33 @@ def draw_prism(points, height, wall_color, roof_color):
         color3(shade_color(wall_color, 0.66 + light * 0.30))
         glVertex3f(x1, 0.03, z1)
         glVertex3f(x2, 0.03, z2)
-        glVertex3f(x2, height, z2)
-        glVertex3f(x1, height, z1)
+        glVertex3f(x2, roof_bottom, z2)
+        glVertex3f(x1, roof_bottom, z1)
     glEnd()
 
-    # Techo.
+    # Losa de techo guinda sobresaliente.
     color3(roof_color)
     glBegin(GL_POLYGON)
-    for x, z in world:
+    for x, z in roof:
         glVertex3f(x, height, z)
+    glEnd()
+
+    # Cara inferior de la losa para que el techo se vea solido desde abajo.
+    color3(shade_color(roof_color, 0.58))
+    glBegin(GL_POLYGON)
+    for x, z in reversed(roof):
+        glVertex3f(x, roof_bottom, z)
+    glEnd()
+
+    # Faldilla vertical del techo para darle volumen hacia abajo.
+    color3(shade_color(roof_color, 0.72))
+    glBegin(GL_QUADS)
+    for i, (x1, z1) in enumerate(roof):
+        x2, z2 = roof[(i + 1) % len(roof)]
+        glVertex3f(x1, roof_bottom, z1)
+        glVertex3f(x2, roof_bottom, z2)
+        glVertex3f(x2, height, z2)
+        glVertex3f(x1, height, z1)
     glEnd()
     
     # Aristas verticales y contorno superior para leer mejor el volumen a nivel de calle.
@@ -556,9 +593,10 @@ def draw_prism(points, height, wall_color, roof_color):
     glBegin(GL_LINES)
     for x, z in world:
         glVertex3f(x, 0.03, z)
-        glVertex3f(x, height, z)
+        glVertex3f(x, roof_bottom, z)
     glEnd()
-    draw_line_loop(points, (0.12, 0.10, 0.08), height + 0.01, 1.0)
+    draw_polyline_world(roof, (0.12, 0.10, 0.08), height + 0.01, 1.0, True)
+    draw_polyline_world(roof, (0.12, 0.10, 0.08), roof_bottom + 0.005, 1.0, True)
 
 
 def draw_ground(size=42):
@@ -687,7 +725,7 @@ def draw_tree(x, z, scale=1.0):
     color3((0.35, 0.22, 0.10))
     segments = 16
     radius = 0.06
-    height = 0.45
+    height = 0.62
     glBegin(GL_QUAD_STRIP)
     for i in range(segments + 1):
         angle = i * 2.0 * math.pi / segments
