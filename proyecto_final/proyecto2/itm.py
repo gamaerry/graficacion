@@ -1220,7 +1220,7 @@ def draw_prism(name, points, height, wall_color, roof_color):
         glVertex3f(x1, height, z1)
     glEnd()
     
-    # Aristas verticales y contorno superior para leer mejor el volumen a nivel de calle.
+    # Aristas verticales y contornos de la losa, apenas separados para evitar z-fighting.
     color3((0.12, 0.10, 0.08))
     glLineWidth(1.0)
     glBegin(GL_LINES)
@@ -1228,8 +1228,8 @@ def draw_prism(name, points, height, wall_color, roof_color):
         glVertex3f(x, 0.03, z)
         glVertex3f(x, roof_bottom, z)
     glEnd()
-    draw_polyline_world(roof, (0.12, 0.10, 0.08), height + 0.01, 1.0, True)
-    draw_polyline_world(roof, (0.12, 0.10, 0.08), roof_bottom + 0.005, 1.0, True)
+    draw_polyline_world(roof, (0.12, 0.10, 0.08), height + 0.001, 1.0, True)
+    draw_polyline_world(roof, (0.12, 0.10, 0.08), roof_bottom + 0.001, 1.0, True)
     draw_building_label(name, world, roof_bottom, roof_color)
 
 
