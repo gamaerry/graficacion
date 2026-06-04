@@ -12,9 +12,9 @@ SCALE = 70.0
 keys = {}
 cenital_view = False
 orange_mode = False
-EYE_HEIGHT = 0.28
+EYE_HEIGHT = 0.18
 BUILDING_HEIGHT_SCALE = 0.65
-COLLISION_RADIUS = 0.18
+COLLISION_RADIUS = 0.08
 MOUSE_SENSITIVITY = 0.12
 DOUBLE_TAP_SECONDS = 0.32
 FALL_GRAVITY = 4.8
@@ -37,6 +37,7 @@ first_mouse = True
 last_mouse_x = 0.0
 last_mouse_y = 0.0
 walk_phase = 0.0
+walk_bob_amount = 0.0
 flight_mode = False
 last_space_press = -10.0
 roof_descent_mode = False
@@ -55,13 +56,14 @@ SKY_COLOR = (0.64, 0.78, 0.92)
 FENCE_BASE_COLOR = (0.34, 0.36, 0.34)
 GREEN_Y = 0.01
 BASE_GREEN_Y = 0.005
-GRAY_Y = 0.045
+GRAY_Y = 0.018
 EDGE_Y = 0.07
-SPORT_Y = 0.085
+SPORT_Y = 0.022
 FENCE_BASE_Y = 0.055
 FENCE_BASE_HEIGHT = 0.32
 FENCE_BASE_WIDTH = 0.20
-FENCE_COLLISION_RADIUS = 0.28
+FENCE_COLLISION_RADIUS = 0.18
+FENCE_SLIDE_EPSILON = 0.015
 RIGHT_SECTION_DX = 120
 
 
@@ -496,7 +498,7 @@ def interp_world(a, b, t):
 
 def draw_field(points):
     draw_flat_polygon(points, FIELD_COLOR, SPORT_Y)
-    draw_line_loop(points, (0.96, 0.96, 0.92), SPORT_Y + 0.03, 2.0)
+    draw_line_loop(points, (0.96, 0.96, 0.92), SPORT_Y + 0.004, 2.0)
 
     world = [svg_to_world(p) for p in points]
     if len(world) != 4:
@@ -519,14 +521,14 @@ def draw_field(points):
     glLineWidth(1.8)
     color3((0.96, 0.96, 0.92))
     glBegin(GL_LINES)
-    glVertex3f(m1[0], SPORT_Y + 0.04, m1[1])
-    glVertex3f(m2[0], SPORT_Y + 0.04, m2[1])
+    glVertex3f(m1[0], SPORT_Y + 0.005, m1[1])
+    glVertex3f(m2[0], SPORT_Y + 0.005, m2[1])
     glEnd()
 
     cx = (a[0] + b[0] + c[0] + d[0]) / 4.0
     cz = (a[1] + b[1] + c[1] + d[1]) / 4.0
     circle = [(cx + math.cos(i * 2 * math.pi / 48) * 0.55, cz + math.sin(i * 2 * math.pi / 48) * 0.55) for i in range(48)]
-    draw_polyline_world(circle, (0.96, 0.96, 0.92), SPORT_Y + 0.05, 1.4, True)
+    draw_polyline_world(circle, (0.96, 0.96, 0.92), SPORT_Y + 0.006, 1.4, True)
 
     for t1, t2 in [(0.08, 0.24), (0.76, 0.92)]:
         if horizontal:
@@ -547,7 +549,7 @@ def draw_field(points):
             box_b = interp_world(p1, p2, 0.75)
             box_c = interp_world(p4, p3, 0.75)
             box_d = interp_world(p4, p3, 0.25)
-        draw_polyline_world([box_a, box_b, box_c, box_d], (0.96, 0.96, 0.92), SPORT_Y + 0.05, 1.2, True)
+        draw_polyline_world([box_a, box_b, box_c, box_d], (0.96, 0.96, 0.92), SPORT_Y + 0.006, 1.2, True)
 
 
 def expand_polygon_world(points, overhang):
@@ -910,23 +912,14 @@ def draw_window_band(points, height):
 def draw_sports_fields():
     # Pista atletica y campo grande oriental.
     draw_ellipse(1780, 916, 215, 430, TRACK_COLOR, SPORT_Y, 96)
-    draw_ellipse(1780, 916, 150, 350, FIELD_COLOR, SPORT_Y + 0.01, 96)
-    draw_polyline_world(ellipse_points(1780, 916, 215, 430, 96), EDGE_COLOR, SPORT_Y + 0.04, 1.0, True)
-    draw_polyline_world(ellipse_points(1780, 916, 150, 350, 96), EDGE_COLOR, SPORT_Y + 0.04, 1.0, True)
+    draw_ellipse(1780, 916, 150, 350, FIELD_COLOR, SPORT_Y + 0.002, 96)
+    draw_polyline_world(ellipse_points(1780, 916, 215, 430, 96), EDGE_COLOR, SPORT_Y + 0.006, 1.0, True)
+    draw_polyline_world(ellipse_points(1780, 916, 150, 350, 96), EDGE_COLOR, SPORT_Y + 0.006, 1.0, True)
     draw_field([(1668, 664), (1890, 668), (1880, 1225), (1658, 1220)])
 
     # Canchas al sur del campus principal.
     draw_field([(1415, 1510), (1768, 1518), (1763, 1706), (1410, 1698)])
     draw_field([(1462, 1805), (1628, 1809), (1624, 1910), (1458, 1906)])
-
-    # Canchas rectangulares del centro-oriente.
-    for points in [
-        [(1395, 1158), (1535, 1160), (1531, 1265), (1392, 1262)],
-        [(1352, 1298), (1518, 1301), (1514, 1436), (1348, 1432)],
-        shift_points([(1948, 1868), (2102, 1930), (2066, 2010), (1912, 1948)], RIGHT_SECTION_DX),
-    ]:
-        draw_flat_polygon(points, BASE_GREEN_COLOR, SPORT_Y)
-        draw_line_loop(points, (0.96, 0.96, 0.92), SPORT_Y + 0.04, 1.5)
 
 
 def is_point_in_poly(point, poly):
@@ -1057,7 +1050,7 @@ def is_blocked_by_fence_world(x, z, y=None, current_x=None, current_z=None):
 
     if current_x is not None and current_z is not None:
         current_distance = min_fence_distance_world(current_x, current_z)
-        if next_distance > current_distance + 1e-4:
+        if next_distance >= current_distance - FENCE_SLIDE_EPSILON:
             return False
 
     return True
@@ -1180,7 +1173,7 @@ def draw_scene(window):
     
     eye_y = camera_pos[1]
     if not cenital_view and camera_pos[1] <= EYE_HEIGHT + 0.03:
-        eye_y += math.sin(walk_phase) * 0.035
+        eye_y += math.sin(walk_phase) * 0.02 * walk_bob_amount
 
     look_x = camera_pos[0] + dir_x
     look_y = eye_y + dir_y
@@ -1208,7 +1201,7 @@ def draw_scene(window):
 
 
 def process_input(delta_time):
-    global camera_yaw, camera_pitch, walk_phase, flight_mode, roof_descent_mode
+    global camera_yaw, camera_pitch, walk_phase, walk_bob_amount, flight_mode, roof_descent_mode
     global falling_mode, ground_override_mode, fall_velocity
 
     frame_speed = camera_speed * delta_time
@@ -1287,6 +1280,7 @@ def process_input(delta_time):
             try_walk(move_x / move_len * frame_speed, move_z / move_len * frame_speed)
             if not flight_mode and not falling_mode:
                 walk_phase += delta_time * 9.0
+                walk_bob_amount = min(1.0, walk_bob_amount + delta_time * 8.0)
                 if not roof_descent_mode:
                     if ground_override_mode:
                         if surface_height_world(camera_pos[0], camera_pos[2]) <= 0.0:
@@ -1333,7 +1327,7 @@ def process_input(delta_time):
             camera_pitch = max(-65.0, camera_pitch - turn_speed * delta_time)
 
     if not moved:
-        walk_phase *= 0.92
+        walk_bob_amount = max(0.0, walk_bob_amount - delta_time * 10.0)
 
 
 def main():
