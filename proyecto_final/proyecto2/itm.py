@@ -48,11 +48,21 @@ FIELD_COLOR = (0.62, 0.80, 0.22)
 TRACK_COLOR = (0.73, 0.56, 0.29)
 GROUND_COLOR = (0.86, 0.90, 0.84)
 SKY_COLOR = (0.64, 0.78, 0.92)
+FENCE_BASE_COLOR = (0.34, 0.36, 0.34)
 GREEN_Y = 0.01
 BASE_GREEN_Y = 0.005
 GRAY_Y = 0.045
 EDGE_Y = 0.07
 SPORT_Y = 0.085
+FENCE_BASE_Y = 0.055
+FENCE_BASE_HEIGHT = 0.32
+FENCE_BASE_WIDTH = 0.20
+FENCE_COLLISION_RADIUS = 0.28
+RIGHT_SECTION_DX = 120
+
+
+def shift_points(points, dx, dy=0):
+    return [(x + dx, y + dy) for x, y in points]
 
 
 CAMPUS_BASE_AREAS = [
@@ -61,7 +71,20 @@ CAMPUS_BASE_AREAS = [
     # Area 2: Bloque central y oriental (polígono principal siguiendo vialidad)
     [(1050, 260), (1850, 320), (2000, 850), (1850, 1450), (1650, 1950), (1150, 1750), (250, 1300), (750, 650)],
     # Area 3: Bloque sur-oriental (triángulo refinado)
-    [(1750, 1800), (2200, 1950), (2020, 2130), (1700, 2040)],
+    shift_points([(1750, 1800), (2200, 1950), (2020, 2130), (1700, 2040)], RIGHT_SECTION_DX),
+]
+
+CAMPUS_FENCE_AREAS = [
+    # Area 1 con el triangulo oriental incluido.
+    [(140, 180), (580, 180), (781, 257), (220, 1020), (140, 1020)],
+    # Area 2 ajustada para abrazar el sur del campus sin invadir la carretera oriental.
+    [(1050, 260), (1850, 320), (2055, 820), (1880, 1460), (1630, 1985), (1140, 1815), (720, 1625), (230, 1375), (750, 650)],
+    # Area 3 con el triangulo norte incluido.
+    shift_points([(1917, 1585), (2200, 1950), (2020, 2130), (1700, 2040), (1750, 1800)], RIGHT_SECTION_DX),
+]
+
+CAMPUS_FILL_AREAS = [
+    CAMPUS_FENCE_AREAS[1],
 ]
 
 BASE_GREEN_COLOR = (0.792, 0.894, 0.725)
@@ -74,10 +97,11 @@ GREEN_AREAS = [
     [(387, 1315), (261, 1312), (317, 1217), (372, 1122), (469, 955), (492, 954), (489, 1118), (393, 1116)],
     [(632, 1340), (257, 1331), (244, 1337), (238, 1352), (248, 1381), (397, 1450), (584, 1538), (591, 1432)],
     [(996, 1225), (713, 1220), (711, 1327), (994, 1332)],
-    [(1760, 1800), (2208, 1945), (2015, 2132), (1708, 2042)],
+    shift_points([(1760, 1800), (2208, 1945), (2015, 2132), (1708, 2042)], RIGHT_SECTION_DX),
+    [(1015, 1530), (1242, 1534), (1241, 1560), (1014, 1556)],
     # Nuevos triángulos de relleno (Modificación quirúrgica solicitada)
     [(580, 180), (781, 257), (220, 1020)],
-    [(1750, 1800), (1917, 1585), (2200, 1950)],
+    shift_points([(1750, 1800), (1917, 1585), (2200, 1950)], RIGHT_SECTION_DX),
 ]
 
 
@@ -121,8 +145,8 @@ CONCRETE_AREAS = [
     [(992, 849), (1196, 853), (1196, 871), (992, 868)],
     [(1006, 1064), (1193, 1067), (1193, 1082), (1005, 1078)],
     [(1097, 1223), (1350, 1228), (1350, 1240), (1097, 1235)],
-    [(1978, 1952), (1988, 1927), (1936, 1910), (1927, 1935)],
-    [(1868, 1959), (1912, 1977), (1895, 2014), (1851, 1996)],
+    shift_points([(1978, 1952), (1988, 1927), (1936, 1910), (1927, 1935)], RIGHT_SECTION_DX),
+    shift_points([(1868, 1959), (1912, 1977), (1895, 2014), (1851, 1996)], RIGHT_SECTION_DX),
     [(1409, 1460), (1438, 1461), (1438, 1431), (1410, 1431)],
 ]
 
@@ -145,9 +169,9 @@ RECTANGULAR_GRAY_AREAS = [
     [(1550, 1245), (1825, 1254), (1820, 1460), (1545, 1452)],
     [(1038, 1452), (1708, 1468), (1704, 1500), (1037, 1484)],
     [(1608, 1722), (1683, 1723), (1680, 1980), (1605, 1968)],
-    [(1796, 1836), (1995, 1831), (1964, 1905), (1827, 1888)],
-    [(1868, 1959), (1912, 1977), (1895, 2014), (1851, 1996)],
-    [(1880, 1875), (1978, 1910), (1942, 1990), (1845, 1954)],
+    shift_points([(1796, 1836), (1995, 1831), (1964, 1905), (1827, 1888)], RIGHT_SECTION_DX),
+    shift_points([(1868, 1959), (1912, 1977), (1895, 2014), (1851, 1996)], RIGHT_SECTION_DX),
+    shift_points([(1880, 1875), (1978, 1910), (1942, 1990), (1845, 1954)], RIGHT_SECTION_DX),
 ]
 
 
@@ -164,14 +188,14 @@ WALKWAYS = [
     [(989, 1119), (1004, 1120), (1000, 1327), (985, 1327)],
     [(944, 1332), (1207, 1336), (1207, 1348), (944, 1343)],
     [(1555, 1445), (1751, 1448), (1751, 1468), (1554, 1464)],
-    [(1827, 1761), (1995, 1831), (1964, 1905), (1796, 1836)],
+    shift_points([(1827, 1761), (1995, 1831), (1964, 1905), (1796, 1836)], RIGHT_SECTION_DX),
     [(738, 1589), (750, 1594), (677, 1761), (665, 1756)],
 ]
 
 
 BUILDINGS = [
-    ("3a", [(1800, 1836), (1888, 1872), (1853, 1949), (1764, 1913)], 1.1),
-    ("3b", [(1948, 1738), (2019, 1767), (1995, 1823), (1924, 1794)], 1.0),
+    ("3a", shift_points([(1800, 1836), (1888, 1872), (1853, 1949), (1764, 1913)], RIGHT_SECTION_DX), 1.1),
+    ("3b", shift_points([(1948, 1738), (2019, 1767), (1995, 1823), (1924, 1794)], RIGHT_SECTION_DX), 1.0),
     ("aa", [(1260, 1254), (1335, 1255), (1334, 1289), (1259, 1288)], 1.0),
     ("y", [(1458, 1298), (1538, 1300), (1537, 1382), (1456, 1380)], 1.7),
     ("2j", [(273, 320), (367, 322), (367, 359), (272, 357)], 1.0),
@@ -612,6 +636,9 @@ def draw_ground(size=42):
 
 def draw_campus_base():
     draw_ground()
+    for area in CAMPUS_FILL_AREAS:
+        draw_flat_polygon(area, BASE_GREEN_COLOR, BASE_GREEN_Y)
+
     for area in CAMPUS_BASE_AREAS:
         draw_flat_polygon(area, BASE_GREEN_COLOR, BASE_GREEN_Y)
 
@@ -626,6 +653,67 @@ def draw_campus_base():
 
     for walkway in WALKWAYS:
         draw_flat_polygon(walkway, GRAY_SURFACE, GRAY_Y)
+
+
+def draw_segment_prism(a, b, width, bottom_y, top_y, color):
+    ax, az = a
+    bx, bz = b
+    dx = bx - ax
+    dz = bz - az
+    length = math.hypot(dx, dz)
+    if length <= 1e-6:
+        return
+
+    nx = -dz / length
+    nz = dx / length
+    half_width = width * 0.5
+    p1 = (ax + nx * half_width, az + nz * half_width)
+    p2 = (bx + nx * half_width, bz + nz * half_width)
+    p3 = (bx - nx * half_width, bz - nz * half_width)
+    p4 = (ax - nx * half_width, az - nz * half_width)
+
+    color3(color)
+    glBegin(GL_QUADS)
+    # Tapa superior.
+    for x, z in (p1, p2, p3, p4):
+        glVertex3f(x, top_y, z)
+
+    # Lados largos.
+    glVertex3f(p1[0], bottom_y, p1[1])
+    glVertex3f(p2[0], bottom_y, p2[1])
+    glVertex3f(p2[0], top_y, p2[1])
+    glVertex3f(p1[0], top_y, p1[1])
+
+    glVertex3f(p3[0], bottom_y, p3[1])
+    glVertex3f(p4[0], bottom_y, p4[1])
+    glVertex3f(p4[0], top_y, p4[1])
+    glVertex3f(p3[0], top_y, p3[1])
+
+    # Tapas de los extremos.
+    glVertex3f(p2[0], bottom_y, p2[1])
+    glVertex3f(p3[0], bottom_y, p3[1])
+    glVertex3f(p3[0], top_y, p3[1])
+    glVertex3f(p2[0], top_y, p2[1])
+
+    glVertex3f(p4[0], bottom_y, p4[1])
+    glVertex3f(p1[0], bottom_y, p1[1])
+    glVertex3f(p1[0], top_y, p1[1])
+    glVertex3f(p4[0], top_y, p4[1])
+    glEnd()
+
+
+def draw_fence_for_area(points):
+    world = [svg_to_world(p) for p in points]
+    base_top_y = FENCE_BASE_Y + FENCE_BASE_HEIGHT
+
+    for i, a in enumerate(world):
+        b = world[(i + 1) % len(world)]
+        draw_segment_prism(a, b, FENCE_BASE_WIDTH, FENCE_BASE_Y, base_top_y, FENCE_BASE_COLOR)
+
+
+def draw_campus_fences():
+    for area in CAMPUS_FENCE_AREAS:
+        draw_fence_for_area(area)
 
 
 # Colores ITM Morelia
@@ -691,7 +779,7 @@ def draw_sports_fields():
     for points in [
         [(1395, 1158), (1535, 1160), (1531, 1265), (1392, 1262)],
         [(1352, 1298), (1518, 1301), (1514, 1436), (1348, 1432)],
-        [(1948, 1868), (2102, 1930), (2066, 2010), (1912, 1948)],
+        shift_points([(1948, 1868), (2102, 1930), (2066, 2010), (1912, 1948)], RIGHT_SECTION_DX),
     ]:
         draw_flat_polygon(points, BASE_GREEN_COLOR, SPORT_Y)
         draw_line_loop(points, (0.96, 0.96, 0.92), SPORT_Y + 0.04, 1.5)
@@ -781,9 +869,59 @@ def draw_compass():
     glPopMatrix()
 
 
+def point_segment_distance_2d(point, a, b):
+    px, pz = point
+    ax, az = a
+    bx, bz = b
+    dx = bx - ax
+    dz = bz - az
+    length_sq = dx * dx + dz * dz
+    if length_sq <= 1e-9:
+        return math.hypot(px - ax, pz - az)
+    t = ((px - ax) * dx + (pz - az) * dz) / length_sq
+    t = max(0.0, min(1.0, t))
+    closest_x = ax + dx * t
+    closest_z = az + dz * t
+    return math.hypot(px - closest_x, pz - closest_z)
+
+
+def min_fence_distance_world(x, z):
+    min_distance = float("inf")
+    for area in CAMPUS_FENCE_AREAS:
+        world = [svg_to_world(p) for p in area]
+        for i, a in enumerate(world):
+            b = world[(i + 1) % len(world)]
+            min_distance = min(min_distance, point_segment_distance_2d((x, z), a, b))
+    return min_distance
+
+
+def fence_top_height_world(x, z, radius=FENCE_COLLISION_RADIUS):
+    if min_fence_distance_world(x, z) < radius:
+        return FENCE_BASE_Y + FENCE_BASE_HEIGHT
+    return 0.0
+
+
+def is_blocked_by_fence_world(x, z, y=None, current_x=None, current_z=None):
+    fence_top = FENCE_BASE_Y + FENCE_BASE_HEIGHT
+    foot_y = y - EYE_HEIGHT if y is not None else None
+    if foot_y is not None and foot_y >= fence_top - 0.03:
+        return False
+
+    next_distance = min_fence_distance_world(x, z)
+    if next_distance >= FENCE_COLLISION_RADIUS:
+        return False
+
+    if current_x is not None and current_z is not None:
+        current_distance = min_fence_distance_world(current_x, current_z)
+        if next_distance > current_distance + 1e-4:
+            return False
+
+    return True
+
+
 def surface_height_world(x, z):
     svg_point = world_to_svg((x, z))
-    roof_height = 0.0
+    roof_height = fence_top_height_world(x, z, FENCE_COLLISION_RADIUS * 0.65)
     for _, points, height in BUILDINGS:
         if is_point_in_poly(svg_point, points):
             roof_height = max(roof_height, height * BUILDING_HEIGHT_SCALE)
@@ -800,6 +938,7 @@ def body_surface_height_world(x, z):
         (x, z - COLLISION_RADIUS),
     ]:
         roof_height = max(roof_height, surface_height_world(sample_x, sample_z))
+        roof_height = max(roof_height, fence_top_height_world(sample_x, sample_z))
     return roof_height
 
 
@@ -862,9 +1001,15 @@ def try_walk(dx, dz):
     next_z = camera_pos[2] + dz
 
     # Probar por eje permite deslizarse por paredes en vez de quedarse pegado.
-    if not is_blocked_world(next_x, camera_pos[2], camera_pos[1], camera_pos[0], camera_pos[2]):
+    if (
+        not is_blocked_world(next_x, camera_pos[2], camera_pos[1], camera_pos[0], camera_pos[2])
+        and not is_blocked_by_fence_world(next_x, camera_pos[2], camera_pos[1], camera_pos[0], camera_pos[2])
+    ):
         camera_pos[0] = next_x
-    if not is_blocked_world(camera_pos[0], next_z, camera_pos[1], camera_pos[0], camera_pos[2]):
+    if (
+        not is_blocked_world(camera_pos[0], next_z, camera_pos[1], camera_pos[0], camera_pos[2])
+        and not is_blocked_by_fence_world(camera_pos[0], next_z, camera_pos[1], camera_pos[0], camera_pos[2])
+    ):
         camera_pos[2] = next_z
 
 
@@ -911,6 +1056,7 @@ def draw_scene(window):
 
     draw_campus_base()
     draw_sports_fields()
+    draw_campus_fences()
     draw_buildings()
     draw_trees()
     draw_compass()
